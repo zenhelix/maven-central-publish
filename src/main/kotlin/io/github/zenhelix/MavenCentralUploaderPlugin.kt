@@ -47,6 +47,11 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
                 description = "Publishes all Maven publications produced by this project to the $MAVEN_CENTRAL_PORTAL_NAME repository."
             }
 
+        val zipAllPublicationsTask = target.tasks.register<Task>("zipDeploymentAllPublications") {
+            group = PUBLISH_TASK_GROUP
+            description = "Deployment bundle for all publications"
+        }
+
         target.afterEvaluate {
 
             val mavenPublications = this.extensions.findByType<PublishingExtension>()?.publications?.withType<MavenPublicationInternal>()
@@ -69,17 +74,12 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
 
                     val signatureFiles = tasks.withType<Sign>().flatMap { it.signatureFiles }.toSet()
 
-                    println("!!! All artifacts: ")
-                    println(normalizedPublication.allArtifacts.map { it.file.absolutePath })
-                    println("!!! All signatureFiles: ")
-                    println(signatureFiles.map { it.absolutePath })
-
                     sources = normalizedPublication.allArtifacts.filterNot { signatureFiles.contains(it.file) }.map {
                         ArtifactInfo(artifact = it, gav = normalizedPublication.projectIdentity)
                     }
                 }
 
-                val zipTask = this.tasks.register<Zip>("zip${normalizedPublication.name.capitalized()}") {
+                val zipTask = this.tasks.register<Zip>("zipDeployment${normalizedPublication.name.capitalized()}Publication") {
                     group = PUBLISH_TASK_GROUP
                     description = "Deployment bundle for ${normalizedPublication.name}"
 
@@ -92,6 +92,7 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
                     }
                     from(createChecksums)
                 }
+                zipAllPublicationsTask.configure { dependsOn(zipTask) }
 
                 val publishPublicationTask =
                     this.tasks.register<PublishBundleMavenCentralTask>("publish${normalizedPublication.name.capitalized()}PublicationTo${MAVEN_CENTRAL_PORTAL_NAME.capitalized()}") {
@@ -132,6 +133,7 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
 
     public companion object {
         public const val MAVEN_CENTRAL_PORTAL_NAME: String = "mavenCentralPortal"
+        public const val MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID: String = "io.github.zenhelix.maven-central-publish"
     }
 
 }

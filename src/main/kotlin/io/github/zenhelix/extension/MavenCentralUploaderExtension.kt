@@ -27,7 +27,7 @@ public open class MavenCentralUploaderExtension @Inject constructor(objects: Obj
     }
 
     public companion object {
-        public const val EXTENSION_NAME: String = "mavenCentralUploader"
+        public const val EXTENSION_NAME: String = "mavenCentralPortal"
 
         public const val DEFAULT_CENTRAL_MAVEN_PORTAL_BASE_URL: String = "https://central.sonatype.com"
     }
