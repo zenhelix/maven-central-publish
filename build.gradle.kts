@@ -5,7 +5,7 @@ import org.jetbrains.kotlin.gradle.utils.extendsFrom
 
 plugins {
     id("com.gradle.plugin-publish") version "1.3.0"
-    `kotlin-dsl` version "5.2.0"
+    `kotlin-dsl`
     signing
     `jacoco-report-aggregation`
     `jvm-test-suite`
@@ -117,7 +117,7 @@ gradlePlugin {
             id = "io.github.zenhelix.maven-central-publish"
             displayName = "A Gradle plugin for simplified publishing to Maven Central via Publisher API"
             description = "A Gradle plugin that simplifies publishing artifacts to Maven Central using the Publisher API"
-            tags.set(listOf("publishing", "maven", "maven central", "maven central portal"))
+            tags.set(listOf("publishing", "maven", "maven central", "maven central portal", "maven publish"))
         }
     }
 }
