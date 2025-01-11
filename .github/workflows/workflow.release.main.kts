@@ -90,7 +90,7 @@ workflow(
         uses(name = "Set up Java", action = SetupJava(javaVersion = "17", distribution = Temurin))
         run(
             name = "Publish",
-            command = "./gradlew publishPlugins --validate-only -Pversion='${expr { tag }}'",
+            command = "./gradlew publishPlugins -Pversion='${expr { tag }}'",
             env = mapOf(
                 GRADLE_PUBLISH_KEY_ENV to expr { secrets.GRADLE_PUBLISH_KEY },
                 GRADLE_PUBLISH_SECRET_ENV to expr { secrets.GRADLE_PUBLISH_SECRET },

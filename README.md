@@ -1,2 +1,3 @@
-# maven-central-publish
-📦 A Gradle plugin that simplifies publishing artifacts to Maven Central
+# Maven Central Portal Publisher
+
+📦 Gradle plugin for effortless publishing to Maven Central using the Publisher API.
