@@ -5,6 +5,7 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import test.utils.PgpUtils.generatePgpKeyPair
 import test.utils.ZipFileAssert.Companion.assertThat
 import test.utils.gradleRunnerDebug
 import java.io.File
@@ -65,6 +66,11 @@ class MavenCentralUploaderPluginFunctionalTest {
                             }
                         }
                     }
+                }
+            
+                signing {
+                    useInMemoryPgpKeys(""${'"'}${generatePgpKeyPair("stub-password")}""${'"'}, "stub-password")
+                    sign(publishing.publications)
                 }
             
                 publishing.publications.withType<MavenPublication> {
@@ -133,18 +139,21 @@ class MavenCentralUploaderPluginFunctionalTest {
         assertThat(ZipFile(bundleFile(tomlModuleName, version).toFile()))
             .containsExactlyInAnyOrderFiles(
                 "test/zenhelix/platform-toml/0.1.0/platform-toml-0.1.0.toml",
+                "test/zenhelix/platform-toml/0.1.0/platform-toml-0.1.0.toml.asc",
                 "test/zenhelix/platform-toml/0.1.0/platform-toml-0.1.0.toml.sha1",
                 "test/zenhelix/platform-toml/0.1.0/platform-toml-0.1.0.toml.md5",
                 "test/zenhelix/platform-toml/0.1.0/platform-toml-0.1.0.toml.sha256",
                 "test/zenhelix/platform-toml/0.1.0/platform-toml-0.1.0.toml.sha512",
 
                 "test/zenhelix/platform-toml/0.1.0/platform-toml-0.1.0.module",
+                "test/zenhelix/platform-toml/0.1.0/platform-toml-0.1.0.module.asc",
                 "test/zenhelix/platform-toml/0.1.0/platform-toml-0.1.0.module.sha1",
                 "test/zenhelix/platform-toml/0.1.0/platform-toml-0.1.0.module.md5",
                 "test/zenhelix/platform-toml/0.1.0/platform-toml-0.1.0.module.sha256",
                 "test/zenhelix/platform-toml/0.1.0/platform-toml-0.1.0.module.sha512",
 
                 "test/zenhelix/platform-toml/0.1.0/platform-toml-0.1.0.pom",
+                "test/zenhelix/platform-toml/0.1.0/platform-toml-0.1.0.pom.asc",
                 "test/zenhelix/platform-toml/0.1.0/platform-toml-0.1.0.pom.sha1",
                 "test/zenhelix/platform-toml/0.1.0/platform-toml-0.1.0.pom.md5",
                 "test/zenhelix/platform-toml/0.1.0/platform-toml-0.1.0.pom.sha256",
@@ -193,12 +202,14 @@ class MavenCentralUploaderPluginFunctionalTest {
         assertThat(ZipFile(bundleFile(bomModuleName, version).toFile()))
             .containsExactlyInAnyOrderFiles(
                 "test/zenhelix/platform-bom/0.1.0/platform-bom-0.1.0.module",
+                "test/zenhelix/platform-bom/0.1.0/platform-bom-0.1.0.module.asc",
                 "test/zenhelix/platform-bom/0.1.0/platform-bom-0.1.0.module.sha1",
                 "test/zenhelix/platform-bom/0.1.0/platform-bom-0.1.0.module.md5",
                 "test/zenhelix/platform-bom/0.1.0/platform-bom-0.1.0.module.sha256",
                 "test/zenhelix/platform-bom/0.1.0/platform-bom-0.1.0.module.sha512",
 
                 "test/zenhelix/platform-bom/0.1.0/platform-bom-0.1.0.pom",
+                "test/zenhelix/platform-bom/0.1.0/platform-bom-0.1.0.pom.asc",
                 "test/zenhelix/platform-bom/0.1.0/platform-bom-0.1.0.pom.sha1",
                 "test/zenhelix/platform-bom/0.1.0/platform-bom-0.1.0.pom.md5",
                 "test/zenhelix/platform-bom/0.1.0/platform-bom-0.1.0.pom.sha256",
@@ -247,6 +258,7 @@ class MavenCentralUploaderPluginFunctionalTest {
 
     private fun bundleFile(moduleName: String, version: String) =
         testProjectDir.toPath().resolve(moduleName).resolve("build").resolve("distributions").resolve("$moduleName-$version.zip")
+
 
     private companion object {
         @TempDir

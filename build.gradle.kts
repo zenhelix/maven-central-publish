@@ -58,6 +58,7 @@ testing {
             dependencies {
                 implementation(project())
                 implementation(gradleTestKit())
+                implementation("org.bouncycastle:bcpg-jdk18on:1.79")
             }
 
             targets {
