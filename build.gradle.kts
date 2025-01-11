@@ -129,8 +129,12 @@ publishing {
 }
 
 signing {
+    // ORG_GRADLE_PROJECT_signingKeyId
     val signingKeyId: String? by project
+    // ascii-armored format
+    // ORG_GRADLE_PROJECT_signingKey
     val signingKey: String? by project
+    // ORG_GRADLE_PROJECT_signingPassword
     val signingPassword: String? by project
 
     useInMemoryPgpKeys(signingKeyId, signingKey, signingPassword)
