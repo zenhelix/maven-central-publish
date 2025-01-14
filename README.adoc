@@ -1,0 +1,130 @@
+= Maven Central Portal Publisher
+
+📦 Gradle plugin for effortless publishing to Maven Central using the Publisher API.
+
+== Installation 🛠️
+
+[source,kotlin]
+----
+plugins {
+    id("io.github.zenhelix.maven-central-publish") version "x.y.z"
+}
+----
+
+== Usage 🚀
+
+The plugin includes the standard `maven-publish` plugin for publishing and the `signing` plugin for signing artifacts.
+For detailed instructions on these, refer to the official documentation:
+
+- https://docs.gradle.org/current/userguide/publishing_maven.html[Maven Publish Plugin Documentation]
+- https://docs.gradle.org/current/userguide/signing_plugin.html[Signing Plugin Documentation]
+
+To connect to Maven Central and use their Publisher API, you can read more here:
+
+- https://central.sonatype.org/publish/publish-guide/[Maven Central Publisher API Guide]
+
+.Basic Plugin Setup Example
+[source,kotlin]
+----
+publishing {
+    repositories {
+        mavenCentralPortal {
+            credentials {
+                username = sonatypeUser
+                password = sonatypePassword
+            }
+        }
+    }
+}
+----
+
+.Full Configuration Example
+[source,kotlin]
+----
+publishing {
+    repositories {
+        mavenCentralPortal {
+            credentials {
+                username = sonatypeUser
+                password = sonatypePassword
+            }
+        }
+    }
+
+    publications {
+        create<MavenPublication>("someJavaLibrary") {
+            from(components["java"])
+
+            pom {
+                description = "A description"
+                url = "https://example.com"
+                licenses {
+                    license {
+                        name = "The Apache License, Version 2.0"
+                        url = "https://www.apache.org/licenses/LICENSE-2.0.txt"
+                    }
+                }
+                scm {
+                    connection = "scm:git:git://example.com/your-repo.git"
+                    developerConnection = "scm:git:ssh://example.com/your-repo.git"
+                    url = "https://example.com/your-repo"
+                }
+                developers {
+                    developer {
+                        id = "your-id"
+                        name = "Your Name"
+                        email = "your.email@example.com"
+                    }
+                }
+            }
+        }
+    }
+}
+
+signing {
+    useInMemoryPgpKeys(signingKeyId, signingKey, signingPassword)
+    sign(publishing.publications)
+}
+----
+
+== Configuration ⚙️
+
+.Plugin Configuration
+[source,kotlin]
+----
+mavenCentralPortal {
+    credentials {
+        username = sonatypeUser
+        password = sonatypePassword
+    }
+    publishingType = PublishingType.USER_MANAGED
+    baseUrl = "https://central.sonatype.com"
+    deploymentName = "some-name"
+}
+----
+
+Where:
+
+- `credentials.username` and `credentials.password`:
+These are your Maven Central credentials.
+* `username`: Your Sonatype account username or token username.
+* `password`: Your Sonatype account password or token password.
+ +
+To generate a token, follow the https://central.sonatype.org/publish/generate-portal-token/[Maven Central Token Generation Guide].
+- `publishingType` defines the publishing mode:
+* `PublishingType.USER_MANAGED`: Uploads artifacts but requires manual publishing on the portal.
+* `PublishingType.AUTOMATIC`: Uploads and publishes artifacts automatically.
+ +
+**Default value:** `PublishingType.AUTOMATIC`
+- `baseUrl` is the URL of the Maven Central portal.
+ +
+**Default value:** `"https://central.sonatype.com"`
+- `deploymentName` is the name of the deployment bundle.
+ +
+**Default value:** `null` +
+For more details, refer to https://central.sonatype.org/publish/publish-portal-api/#uploading-a-deployment-bundle[Maven Central Deployment Documentation]
+
+== License 📜
+
+Licensed under the **Apache License, Version 2.0**.
+For more details, see the link:LICENSE[LICENSE file] in the root of this repository.
