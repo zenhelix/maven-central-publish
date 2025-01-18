@@ -12,6 +12,3 @@ build/
 *.iml
 *.ipr
 out/
-
-### doc pages
-public

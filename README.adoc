@@ -1,13 +1,16 @@
+:source-highlighter: highlight.js
+:versionPlaceholder: x.y.z
+
 = Maven Central Portal Publisher
 
 📦 Gradle plugin for effortless publishing to Maven Central using the Publisher API.
 
 == Installation 🛠️
 
-[source,kotlin]
+[source,kotlin,subs="+attributes"]
 ----
 plugins {
-    id("io.github.zenhelix.maven-central-publish") version "x.y.z"
+    id("io.github.zenhelix.maven-central-publish") version "{versionPlaceholder}"
 }
 ----
 
@@ -24,7 +27,7 @@ To connect to Maven Central and use their Publisher API, you can read more here:
 - https://central.sonatype.org/publish/publish-guide/[Maven Central Publisher API Guide]
 
 .Basic Plugin Setup Example
-[source,kotlin]
+[source,kotlin,subs="+attributes"]
 ----
 publishing {
     repositories {
@@ -39,7 +42,7 @@ publishing {
 ----
 
 .Full Configuration Example
-[source,kotlin]
+[source,kotlin,subs="+attributes"]
 ----
 publishing {
     repositories {
@@ -90,7 +93,7 @@ signing {
 == Configuration ⚙️
 
 .Plugin Configuration
-[source,kotlin]
+[source,kotlin,subs="+attributes"]
 ----
 mavenCentralPortal {
     credentials {

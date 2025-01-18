@@ -1,15 +1,12 @@
-package io.github.zenhelix
+package io.github.zenhelix.gradle.plugin
 
-import io.github.zenhelix.client.model.Credentials
-import io.github.zenhelix.client.model.PublishingType.AUTOMATIC
-import io.github.zenhelix.client.model.PublishingType.USER_MANAGED
-import io.github.zenhelix.extension.MavenCentralUploaderExtension
-import io.github.zenhelix.extension.MavenCentralUploaderExtension.Companion.EXTENSION_NAME
-import io.github.zenhelix.extension.PublishingType
-import io.github.zenhelix.task.ArtifactInfo
-import io.github.zenhelix.task.CreateChecksumTask
-import io.github.zenhelix.task.PublicationInfo
-import io.github.zenhelix.task.PublishBundleMavenCentralTask
+import io.github.zenhelix.gradle.plugin.client.model.Credentials
+import io.github.zenhelix.gradle.plugin.extension.MavenCentralUploaderExtension
+import io.github.zenhelix.gradle.plugin.extension.PublishingType
+import io.github.zenhelix.gradle.plugin.task.ArtifactInfo
+import io.github.zenhelix.gradle.plugin.task.CreateChecksumTask
+import io.github.zenhelix.gradle.plugin.task.PublicationInfo
+import io.github.zenhelix.gradle.plugin.task.PublishBundleMavenCentralTask
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.Task
@@ -37,7 +34,7 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
             apply(SigningPlugin::class)
         }
 
-        val mavenCentralUploaderExtension = target.extensions.create<MavenCentralUploaderExtension>(EXTENSION_NAME)
+        val mavenCentralUploaderExtension = target.extensions.create<MavenCentralUploaderExtension>(MavenCentralUploaderExtension.Companion.MAVEN_CENTRAL_UPLOADER_EXTENSION_NAME)
 
         val publishLifecycleTask = target.tasks.named(PUBLISH_LIFECYCLE_TASK_NAME);
 
@@ -115,8 +112,8 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
 
                         publishingType.set(mavenCentralUploaderExtension.publishingType.map {
                             when (it) {
-                                PublishingType.AUTOMATIC -> AUTOMATIC
-                                PublishingType.USER_MANAGED -> USER_MANAGED
+                                PublishingType.AUTOMATIC -> io.github.zenhelix.gradle.plugin.client.model.PublishingType.AUTOMATIC
+                                PublishingType.USER_MANAGED -> io.github.zenhelix.gradle.plugin.client.model.PublishingType.USER_MANAGED
                             }
                         })
                         deploymentName.set(mavenCentralUploaderExtension.deploymentName)

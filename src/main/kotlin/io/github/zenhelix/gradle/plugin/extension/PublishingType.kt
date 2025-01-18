@@ -1,4 +1,4 @@
-package io.github.zenhelix.extension
+package io.github.zenhelix.gradle.plugin.extension
 
 public enum class PublishingType {
     AUTOMATIC,

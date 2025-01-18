@@ -1,9 +1,9 @@
-package io.github.zenhelix.client
+package io.github.zenhelix.gradle.plugin.client
 
-import io.github.zenhelix.client.model.Credentials
-import io.github.zenhelix.client.model.DeploymentStatus
-import io.github.zenhelix.client.model.HttpResponseResult
-import io.github.zenhelix.client.model.PublishingType
+import io.github.zenhelix.gradle.plugin.client.model.Credentials
+import io.github.zenhelix.gradle.plugin.client.model.DeploymentStatus
+import io.github.zenhelix.gradle.plugin.client.model.HttpResponseResult
+import io.github.zenhelix.gradle.plugin.client.model.PublishingType
 import java.nio.file.Path
 import java.util.UUID
 

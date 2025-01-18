@@ -1,12 +1,11 @@
-package io.github.zenhelix
+package io.github.zenhelix.gradle.plugin
 
-import io.github.zenhelix.MavenCentralUploaderPlugin.Companion.MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID
-import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
-import test.utils.PgpUtils.generatePgpKeyPair
-import test.utils.ZipFileAssert.Companion.assertThat
+import test.utils.PgpUtils
+import test.utils.ZipFileAssert
 import test.utils.gradleRunnerDebug
 import java.io.File
 import java.util.zip.ZipFile
@@ -41,7 +40,7 @@ class MavenCentralUploaderPluginFunctionalTest {
             plugins {
                 `java-platform`
                 `version-catalog`
-                id("$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
+                id("${MavenCentralUploaderPlugin.Companion.MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID}")
             }
             
             allprojects {
@@ -53,7 +52,7 @@ class MavenCentralUploaderPluginFunctionalTest {
             
             configure(subprojects.filter { it.name.contains("-bom") || it.name.contains("-toml") }) {
                 apply {
-                    plugin("$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
+                    plugin("${MavenCentralUploaderPlugin.Companion.MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID}")
                 }
             
                 publishing {
@@ -69,7 +68,7 @@ class MavenCentralUploaderPluginFunctionalTest {
                 }
             
                 signing {
-                    useInMemoryPgpKeys(""${'"'}${generatePgpKeyPair("stub-password")}""${'"'}, "stub-password")
+                    useInMemoryPgpKeys(""${'"'}${PgpUtils.generatePgpKeyPair("stub-password")}""${'"'}, "stub-password")
                     sign(publishing.publications)
                 }
             
@@ -133,10 +132,10 @@ class MavenCentralUploaderPluginFunctionalTest {
 
         gradleRunnerDebug(testProjectDir) { withArguments("zipDeploymentAllPublications", "-Pversion=$version") }
 
-        assertThat(bundleFile(tomlModuleName, version)).exists()
-        assertThat(bundleFile(bomModuleName, version)).exists()
+        Assertions.assertThat(bundleFile(tomlModuleName, version)).exists()
+        Assertions.assertThat(bundleFile(bomModuleName, version)).exists()
 
-        assertThat(ZipFile(bundleFile(tomlModuleName, version).toFile()))
+        ZipFileAssert.Companion.assertThat(ZipFile(bundleFile(tomlModuleName, version).toFile()))
             .containsExactlyInAnyOrderFiles(
                 "test/zenhelix/platform-toml/0.1.0/platform-toml-0.1.0.toml",
                 "test/zenhelix/platform-toml/0.1.0/platform-toml-0.1.0.toml.asc",
@@ -199,7 +198,7 @@ class MavenCentralUploaderPluginFunctionalTest {
 """
             )
 
-        assertThat(ZipFile(bundleFile(bomModuleName, version).toFile()))
+        ZipFileAssert.Companion.assertThat(ZipFile(bundleFile(bomModuleName, version).toFile()))
             .containsExactlyInAnyOrderFiles(
                 "test/zenhelix/platform-bom/0.1.0/platform-bom-0.1.0.module",
                 "test/zenhelix/platform-bom/0.1.0/platform-bom-0.1.0.module.asc",
