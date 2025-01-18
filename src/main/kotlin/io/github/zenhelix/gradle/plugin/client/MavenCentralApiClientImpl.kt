@@ -1,11 +1,11 @@
-package io.github.zenhelix.client
+package io.github.zenhelix.gradle.plugin.client
 
 import groovy.json.JsonSlurper
-import io.github.zenhelix.client.model.Credentials
-import io.github.zenhelix.client.model.DeploymentStateType
-import io.github.zenhelix.client.model.DeploymentStatus
-import io.github.zenhelix.client.model.HttpResponseResult
-import io.github.zenhelix.client.model.PublishingType
+import io.github.zenhelix.gradle.plugin.client.model.Credentials
+import io.github.zenhelix.gradle.plugin.client.model.DeploymentStateType
+import io.github.zenhelix.gradle.plugin.client.model.DeploymentStatus
+import io.github.zenhelix.gradle.plugin.client.model.HttpResponseResult
+import io.github.zenhelix.gradle.plugin.client.model.PublishingType
 import java.net.URI
 import java.net.URLEncoder.encode
 import java.net.http.HttpClient
@@ -80,7 +80,7 @@ public class MavenCentralApiClientImpl(private val baseUrl: String) : MavenCentr
                     data = DeploymentStatus(
                         deploymentId = (jsonObject["deploymentId"] as String).let { UUID.fromString(it) },
                         deploymentName = jsonObject["deploymentName"] as String,
-                        deploymentState = (jsonObject["deploymentState"] as String).let { DeploymentStateType.of(it) },
+                        deploymentState = (jsonObject["deploymentState"] as String).let { DeploymentStateType.Companion.of(it) },
                         purls = jsonObject["purls"] as List<String>?,
                         errors = jsonObject["errors"] as Map<String, Any?>?
                     ),

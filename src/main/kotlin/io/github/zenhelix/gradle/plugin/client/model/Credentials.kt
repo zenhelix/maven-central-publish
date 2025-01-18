@@ -1,4 +1,4 @@
-package io.github.zenhelix.client.model
+package io.github.zenhelix.gradle.plugin.client.model
 
 import java.io.Serializable
 import java.util.Base64

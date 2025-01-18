@@ -4,7 +4,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.utils.extendsFrom
 
 plugins {
-    id("com.gradle.plugin-publish") version "1.3.0"
+    id("com.gradle.plugin-publish")
     `kotlin-dsl`
     signing
     `jacoco-report-aggregation`
@@ -113,7 +113,7 @@ gradlePlugin {
 
     plugins {
         create("maven-central-publish") {
-            implementationClass = "io.github.zenhelix.MavenCentralUploaderPlugin"
+            implementationClass = "io.github.zenhelix.gradle.plugin.MavenCentralUploaderPlugin"
             id = "io.github.zenhelix.maven-central-publish"
             displayName = "A Gradle plugin for simplified publishing to Maven Central via Publisher API"
             description = "A Gradle plugin that simplifies publishing artifacts to Maven Central using the Publisher API"

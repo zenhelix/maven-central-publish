@@ -1,4 +1,4 @@
-package io.github.zenhelix.client.model
+package io.github.zenhelix.gradle.plugin.client.model
 
 public enum class PublishingType(public val id: String) {
     AUTOMATIC("AUTOMATIC"),

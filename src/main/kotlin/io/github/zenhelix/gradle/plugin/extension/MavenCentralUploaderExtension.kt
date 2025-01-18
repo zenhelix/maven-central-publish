@@ -1,4 +1,4 @@
-package io.github.zenhelix.extension
+package io.github.zenhelix.gradle.plugin.extension
 
 import org.gradle.api.Action
 import org.gradle.api.model.ObjectFactory
@@ -27,7 +27,7 @@ public open class MavenCentralUploaderExtension @Inject constructor(objects: Obj
     }
 
     public companion object {
-        public const val EXTENSION_NAME: String = "mavenCentralPortal"
+        public const val MAVEN_CENTRAL_UPLOADER_EXTENSION_NAME: String = "mavenCentralPortal"
 
         public const val DEFAULT_CENTRAL_MAVEN_PORTAL_BASE_URL: String = "https://central.sonatype.com"
     }

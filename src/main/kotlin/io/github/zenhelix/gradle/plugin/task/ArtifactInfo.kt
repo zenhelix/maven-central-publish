@@ -1,4 +1,4 @@
-package io.github.zenhelix.task
+package io.github.zenhelix.gradle.plugin.task
 
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import org.gradle.api.publish.maven.MavenArtifact

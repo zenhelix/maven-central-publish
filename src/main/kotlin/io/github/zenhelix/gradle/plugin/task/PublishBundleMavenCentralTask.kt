@@ -1,9 +1,9 @@
-package io.github.zenhelix.task
+package io.github.zenhelix.gradle.plugin.task
 
-import io.github.zenhelix.client.MavenCentralApiClientImpl
-import io.github.zenhelix.client.model.Credentials
-import io.github.zenhelix.client.model.DeploymentStateType
-import io.github.zenhelix.client.model.PublishingType
+import io.github.zenhelix.gradle.plugin.client.MavenCentralApiClientImpl
+import io.github.zenhelix.gradle.plugin.client.model.Credentials
+import io.github.zenhelix.gradle.plugin.client.model.DeploymentStateType
+import io.github.zenhelix.gradle.plugin.client.model.PublishingType
 import org.gradle.api.DefaultTask
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.Property
