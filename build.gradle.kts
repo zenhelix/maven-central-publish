@@ -15,6 +15,7 @@ group = "io.github.zenhelix"
 
 repositories {
     mavenCentral()
+    gradlePluginPortal()
 }
 
 val jdkVersion = JavaVersion.VERSION_17
@@ -122,6 +123,10 @@ gradlePlugin {
     }
 }
 
+dependencies{
+    compileOnly("org.jetbrains.kotlin:kotlin-gradle-plugin:2.1.0")
+}
+
 publishing {
     repositories {
         mavenLocal()
@@ -136,6 +141,8 @@ signing {
     val signingKey: String? by project
     // ORG_GRADLE_PROJECT_signingPassword
     val signingPassword: String? by project
+
+    isRequired = false
 
     useInMemoryPgpKeys(signingKeyId, signingKey, signingPassword)
     sign(publishing.publications)

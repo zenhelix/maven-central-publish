@@ -2,9 +2,11 @@ package io.github.zenhelix.gradle.plugin
 
 import io.github.zenhelix.gradle.plugin.client.model.Credentials
 import io.github.zenhelix.gradle.plugin.extension.MavenCentralUploaderExtension
+import io.github.zenhelix.gradle.plugin.extension.MavenCentralUploaderExtension.Companion.MAVEN_CENTRAL_UPLOADER_EXTENSION_NAME
 import io.github.zenhelix.gradle.plugin.extension.PublishingType
 import io.github.zenhelix.gradle.plugin.task.ArtifactInfo
 import io.github.zenhelix.gradle.plugin.task.CreateChecksumTask
+import io.github.zenhelix.gradle.plugin.task.GAV
 import io.github.zenhelix.gradle.plugin.task.PublicationInfo
 import io.github.zenhelix.gradle.plugin.task.PublishBundleMavenCentralTask
 import org.gradle.api.Plugin
@@ -34,7 +36,7 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
             apply(SigningPlugin::class)
         }
 
-        val mavenCentralUploaderExtension = target.extensions.create<MavenCentralUploaderExtension>(MavenCentralUploaderExtension.Companion.MAVEN_CENTRAL_UPLOADER_EXTENSION_NAME)
+        val mavenCentralUploaderExtension = target.extensions.create<MavenCentralUploaderExtension>(MAVEN_CENTRAL_UPLOADER_EXTENSION_NAME)
 
         val publishLifecycleTask = target.tasks.named(PUBLISH_LIFECYCLE_TASK_NAME);
 
@@ -56,35 +58,36 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
             val allTaskDependencies = mutableListOf<TaskDependency>()
             mavenPublications?.forEach { it.allPublishableArtifacts { allTaskDependencies.add(buildDependencies) } }
 
-            mavenPublications?.map { it.asNormalisedPublication() }?.forEach { normalizedPublication ->
+            mavenPublications?.forEach { publication ->
 
-                val publication = PublicationInfo(
-                    normalizedPublication.projectIdentity,
-                    normalizedPublication.allArtifacts.map { ArtifactInfo(artifact = it, gav = normalizedPublication.projectIdentity) }
+                val gav = GAV(publication.groupId, publication.artifactId, publication.version)
+                val publicationInfo = PublicationInfo(
+                    gav = gav,
+                    artifacts = publication.publishableArtifacts.map { ArtifactInfo(artifact = it, gav = gav) }
                 )
 
-                val createChecksums = this.tasks.register<CreateChecksumTask>("checksum${normalizedPublication.name.capitalized()}") {
+                val createChecksums = this.tasks.register<CreateChecksumTask>("checksum${publication.name.capitalized()}") {
                     group = PUBLISH_TASK_GROUP
-                    description = "Generate checksums for ${normalizedPublication.name}"
+                    description = "Generate checksums for ${publication.name}"
 
                     allTaskDependencies.forEach { this.dependsOn(it) }
 
                     val signatureFiles = tasks.withType<Sign>().flatMap { it.signatureFiles }.toSet()
 
-                    sources = normalizedPublication.allArtifacts.filterNot { signatureFiles.contains(it.file) }.map {
-                        ArtifactInfo(artifact = it, gav = normalizedPublication.projectIdentity)
+                    sources = publication.publishableArtifacts.filterNot { signatureFiles.contains(it.file) }.map {
+                        ArtifactInfo(artifact = it, gav = gav)
                     }
                 }
 
-                val zipTask = this.tasks.register<Zip>("zipDeployment${normalizedPublication.name.capitalized()}Publication") {
+                val zipTask = this.tasks.register<Zip>("zipDeployment${publication.name.capitalized()}Publication") {
                     group = PUBLISH_TASK_GROUP
-                    description = "Deployment bundle for ${normalizedPublication.name}"
+                    description = "Deployment bundle for ${publication.name}"
 
                     allTaskDependencies.forEach { this.dependsOn(it) }
                     dependsOn(createChecksums)
 
-                    into(publication.artifactPath)
-                    publication.artifacts.forEach { artifactInfo ->
+                    into(publicationInfo.artifactPath)
+                    publicationInfo.artifacts.forEach { artifactInfo ->
                         from(artifactInfo.file()) { rename { artifactInfo.artifactName } }
                     }
                     from(createChecksums)
@@ -92,10 +95,9 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
                 zipAllPublicationsTask.configure { dependsOn(zipTask) }
 
                 val publishPublicationTask =
-                    this.tasks.register<PublishBundleMavenCentralTask>("publish${normalizedPublication.name.capitalized()}PublicationTo${MAVEN_CENTRAL_PORTAL_NAME.capitalized()}") {
+                    this.tasks.register<PublishBundleMavenCentralTask>("publish${publication.name.capitalized()}PublicationTo${MAVEN_CENTRAL_PORTAL_NAME.capitalized()}") {
                         group = PUBLISH_TASK_GROUP
-                        description =
-                            "Publishes Maven publication '${normalizedPublication.name}' to Maven repository '$MAVEN_CENTRAL_PORTAL_NAME'."
+                        description = "Publishes Maven publication '${publication.name}' to Maven repository '$MAVEN_CENTRAL_PORTAL_NAME'."
 
                         dependsOn(zipTask)
 
