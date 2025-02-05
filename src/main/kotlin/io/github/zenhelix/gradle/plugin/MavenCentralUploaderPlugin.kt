@@ -25,7 +25,6 @@ import org.gradle.kotlin.dsl.create
 import org.gradle.kotlin.dsl.findByType
 import org.gradle.kotlin.dsl.register
 import org.gradle.kotlin.dsl.withType
-import org.gradle.plugins.signing.Sign
 import org.gradle.plugins.signing.SigningPlugin
 
 public class MavenCentralUploaderPlugin : Plugin<Project> {
@@ -59,45 +58,50 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
             mavenPublications?.forEach { it.allPublishableArtifacts { allTaskDependencies.add(buildDependencies) } }
 
             mavenPublications?.forEach { publication ->
+                val publicationName = publication.name
 
-                val gav = GAV(publication.groupId, publication.artifactId, publication.version)
-                val publicationInfo = PublicationInfo(
-                    gav = gav,
-                    artifacts = publication.publishableArtifacts.map { ArtifactInfo(artifact = it, gav = gav) }
-                )
-
-                val createChecksums = this.tasks.register<CreateChecksumTask>("checksum${publication.name.capitalized()}") {
+                val createChecksums = this.tasks.register<CreateChecksumTask>("checksum${publicationName.capitalized()}") {
                     group = PUBLISH_TASK_GROUP
-                    description = "Generate checksums for ${publication.name}"
+                    description = "Generate checksums for $publicationName"
 
                     allTaskDependencies.forEach { this.dependsOn(it) }
 
-                    val signatureFiles = tasks.withType<Sign>().flatMap { it.signatureFiles }.toSet()
-
-                    sources = publication.publishableArtifacts.filterNot { signatureFiles.contains(it.file) }.map {
-                        ArtifactInfo(artifact = it, gav = gav)
-                    }
+                    this.publicationName.set(publicationName)
                 }
 
-                val zipTask = this.tasks.register<Zip>("zipDeployment${publication.name.capitalized()}Publication") {
+                val zipTask = this.tasks.register<Zip>("zipDeployment${publicationName.capitalized()}Publication") {
                     group = PUBLISH_TASK_GROUP
-                    description = "Deployment bundle for ${publication.name}"
+                    description = "Deployment bundle for $publicationName"
 
                     allTaskDependencies.forEach { this.dependsOn(it) }
                     dependsOn(createChecksums)
 
-                    into(publicationInfo.artifactPath)
-                    publicationInfo.artifacts.forEach { artifactInfo ->
-                        from(artifactInfo.file()) { rename { artifactInfo.artifactName } }
+                    if (mavenPublications.size > 1) {
+                        archiveAppendix.set(publicationName)
                     }
-                    from(createChecksums)
+
+                    from(createChecksums) {
+                        val pub =
+                            project.extensions.getByType(PublishingExtension::class.java).publications.getByName(publicationName) as MavenPublicationInternal
+                        val publicationInfo = GAV(pub.groupId, pub.artifactId, pub.version).let { gav ->
+                            PublicationInfo(
+                                gav = gav,
+                                artifacts = pub.publishableArtifacts.map { ArtifactInfo(artifact = it, gav = gav) }
+                            )
+                        }
+
+                        into(publicationInfo.artifactPath)
+                        publicationInfo.artifacts.forEach { artifactInfo ->
+                            from(artifactInfo.file()) { rename { artifactInfo.artifactName } }
+                        }
+                    }
                 }
                 zipAllPublicationsTask.configure { dependsOn(zipTask) }
 
                 val publishPublicationTask =
-                    this.tasks.register<PublishBundleMavenCentralTask>("publish${publication.name.capitalized()}PublicationTo${MAVEN_CENTRAL_PORTAL_NAME.capitalized()}") {
+                    this.tasks.register<PublishBundleMavenCentralTask>("publish${publicationName.capitalized()}PublicationTo${MAVEN_CENTRAL_PORTAL_NAME.capitalized()}") {
                         group = PUBLISH_TASK_GROUP
-                        description = "Publishes Maven publication '${publication.name}' to Maven repository '$MAVEN_CENTRAL_PORTAL_NAME'."
+                        description = "Publishes Maven publication '$publicationName' to Maven repository '$MAVEN_CENTRAL_PORTAL_NAME'."
 
                         dependsOn(zipTask)
 

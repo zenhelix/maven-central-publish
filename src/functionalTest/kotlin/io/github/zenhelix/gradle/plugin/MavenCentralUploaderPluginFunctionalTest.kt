@@ -5,7 +5,7 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
-import test.utils.PgpUtils
+import test.utils.PgpUtils.generatePgpKeyPair
 import test.utils.ZipFileAssert.Companion.assertThat
 import test.utils.gradleRunnerDebug
 import java.io.File
@@ -69,7 +69,7 @@ class MavenCentralUploaderPluginFunctionalTest {
                 }
             
                 signing {
-                    useInMemoryPgpKeys(""${'"'}${PgpUtils.generatePgpKeyPair("stub-password")}""${'"'}, "stub-password")
+                    useInMemoryPgpKeys(""${'"'}${generatePgpKeyPair("stub-password")}""${'"'}, "stub-password")
                     sign(publishing.publications)
                 }
             
@@ -133,10 +133,10 @@ class MavenCentralUploaderPluginFunctionalTest {
 
         gradleRunnerDebug(testProjectDir) { withArguments("zipDeploymentAllPublications", "-Pversion=$version") }
 
-        assertThat(bundleFile(tomlModuleName, version)).exists()
-        assertThat(bundleFile(bomModuleName, version)).exists()
+        assertThat(moduleBundleFile(tomlModuleName, tomlModuleName, version)).exists()
+        assertThat(moduleBundleFile(bomModuleName, bomModuleName, version)).exists()
 
-        assertThat(ZipFile(bundleFile(tomlModuleName, version).toFile()))
+        assertThat(ZipFile(moduleBundleFile(tomlModuleName, tomlModuleName, version).toFile()))
             .containsExactlyInAnyOrderFiles(
                 "test/zenhelix/platform-toml/0.1.0/platform-toml-0.1.0.toml",
                 "test/zenhelix/platform-toml/0.1.0/platform-toml-0.1.0.toml.asc",
@@ -199,7 +199,7 @@ class MavenCentralUploaderPluginFunctionalTest {
 """
             )
 
-        assertThat(ZipFile(bundleFile(bomModuleName, version).toFile()))
+        assertThat(ZipFile(moduleBundleFile(bomModuleName, bomModuleName, version).toFile()))
             .containsExactlyInAnyOrderFiles(
                 "test/zenhelix/platform-bom/0.1.0/platform-bom-0.1.0.module",
                 "test/zenhelix/platform-bom/0.1.0/platform-bom-0.1.0.module.asc",
@@ -256,9 +256,227 @@ class MavenCentralUploaderPluginFunctionalTest {
             )
     }
 
-    private fun bundleFile(moduleName: String, version: String) =
-        testProjectDir.toPath().resolve(moduleName).resolve("build").resolve("distributions").resolve("$moduleName-$version.zip")
+    @Test fun `kmm publishing`() {
+        val moduleName = "test"
+        val version = "0.1.0"
+        //language=kotlin
+        settingsFile.writeText(
+            """
+            rootProject.name = "$moduleName"
+    
+            dependencyResolutionManagement {
+                repositories {
+                    mavenCentral()
+                    google()
+                    mavenLocal()
+                }
+            }
 
+            pluginManagement {
+                repositories {
+                    gradlePluginPortal()
+                    google()
+                    mavenLocal()
+                }
+            }
+            """.trimIndent()
+        )
+        //language=kotlin
+        rootBuildFile.writeText(
+            """
+            import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
+            plugins {
+                id("com.android.library") version "8.2.0"
+                id("org.jetbrains.kotlin.multiplatform") version "2.1.0"
+
+                id("$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
+            }
+
+            allprojects {
+                group = "test.zenhelix"
+            }
+
+            publishing {
+                repositories {
+                    mavenLocal()
+                    mavenCentralPortal {
+                        credentials {
+                            username = "stub"
+                            password = "stub"
+                        }
+                    }
+                }
+            }
+
+            signing {
+                useInMemoryPgpKeys(""${'"'}${generatePgpKeyPair("stub-password")}""${'"'}, "stub-password")
+                sign(publishing.publications)
+            }
+
+            publishing.publications.withType<MavenPublication> {
+                pom {
+                    description = "stub description"
+                    url = "https://stub.stub"
+                    licenses {
+                        license {
+                            name = "The Apache License, Version 2.0"
+                            url = "https://www.apache.org/licenses/LICENSE-2.0.txt"
+                        }
+                    }
+                    scm {
+                        connection = "scm:git:git://stub.stub.git"
+                        developerConnection = "scm:git:ssh://stub.stub.git"
+                        url = "https://stub.stub"
+                    }
+                    developers {
+                        developer {
+                            id = "stub"
+                            name = "Stub Stub"
+                            email = "stub@stub.stub"
+                        }
+                    }
+                }
+            }
+
+            kotlin {
+                jvm()
+                androidTarget {
+                    publishLibraryVariants("release")
+                    compilerOptions {
+                        jvmTarget.set(JvmTarget.JVM_1_8)
+                    }
+                }
+                linuxX64()
+            }
+
+            android {
+                namespace = "test"
+                compileSdk = 34
+                defaultConfig {
+                    minSdk = 24
+                }
+            }
+            """.trimIndent()
+        )
+
+        File(testProjectDir, "src/commonMain/kotlin/test/TestFile.kt").also { it.parentFile.mkdirs() }.writeText(
+            """
+            package test
+            
+            fun generate() {}
+            """.trimIndent()
+        )
+
+        gradleRunnerDebug(testProjectDir) { withArguments("zipDeploymentAllPublications", "-Pversion=$version") }
+
+        assertThat(moduleBundleFile(null, moduleName, version, "kotlinMultiplatform")).exists()
+        assertThat(ZipFile(moduleBundleFile(null, moduleName, version, "kotlinMultiplatform").toFile()))
+            .containsExactlyInAnyOrderFiles(
+                "test/zenhelix/test/0.1.0/test-0.1.0.jar",
+                "test/zenhelix/test/0.1.0/test-0.1.0.jar.asc",
+                "test/zenhelix/test/0.1.0/test-0.1.0.jar.sha1",
+                "test/zenhelix/test/0.1.0/test-0.1.0.jar.md5",
+                "test/zenhelix/test/0.1.0/test-0.1.0.jar.sha256",
+                "test/zenhelix/test/0.1.0/test-0.1.0.jar.sha512",
+
+                "test/zenhelix/test/0.1.0/test-0.1.0-sources.jar",
+                "test/zenhelix/test/0.1.0/test-0.1.0-sources.jar.asc",
+                "test/zenhelix/test/0.1.0/test-0.1.0-sources.jar.sha1",
+                "test/zenhelix/test/0.1.0/test-0.1.0-sources.jar.md5",
+                "test/zenhelix/test/0.1.0/test-0.1.0-sources.jar.sha256",
+                "test/zenhelix/test/0.1.0/test-0.1.0-sources.jar.sha512",
+
+                "test/zenhelix/test/0.1.0/test-0.1.0.pom",
+                "test/zenhelix/test/0.1.0/test-0.1.0.pom.asc",
+                "test/zenhelix/test/0.1.0/test-0.1.0.pom.sha1",
+                "test/zenhelix/test/0.1.0/test-0.1.0.pom.md5",
+                "test/zenhelix/test/0.1.0/test-0.1.0.pom.sha256",
+                "test/zenhelix/test/0.1.0/test-0.1.0.pom.sha512",
+
+                "test/zenhelix/test/0.1.0/test-0.1.0.module",
+                "test/zenhelix/test/0.1.0/test-0.1.0.module.asc",
+                "test/zenhelix/test/0.1.0/test-0.1.0.module.sha1",
+                "test/zenhelix/test/0.1.0/test-0.1.0.module.md5",
+                "test/zenhelix/test/0.1.0/test-0.1.0.module.sha256",
+                "test/zenhelix/test/0.1.0/test-0.1.0.module.sha512",
+
+                "test/zenhelix/test/0.1.0/test-0.1.0-kotlin-tooling-metadata.json",
+                "test/zenhelix/test/0.1.0/test-0.1.0-kotlin-tooling-metadata.json.asc",
+                "test/zenhelix/test/0.1.0/test-0.1.0-kotlin-tooling-metadata.json.sha1",
+                "test/zenhelix/test/0.1.0/test-0.1.0-kotlin-tooling-metadata.json.md5",
+                "test/zenhelix/test/0.1.0/test-0.1.0-kotlin-tooling-metadata.json.sha256",
+                "test/zenhelix/test/0.1.0/test-0.1.0-kotlin-tooling-metadata.json.sha512"
+            )
+
+        assertThat(moduleBundleFile(null, moduleName, version, "jvm")).exists()
+        assertThat(ZipFile(moduleBundleFile(null, moduleName, version, "jvm").toFile()))
+            .containsExactlyInAnyOrderFiles(
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.jar",
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.jar.asc",
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.jar.sha1",
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.jar.md5",
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.jar.sha256",
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.jar.sha512",
+
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0-sources.jar",
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0-sources.jar.asc",
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0-sources.jar.sha1",
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0-sources.jar.md5",
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0-sources.jar.sha256",
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0-sources.jar.sha512",
+
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.pom",
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.pom.asc",
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.pom.sha1",
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.pom.md5",
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.pom.sha256",
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.pom.sha512",
+
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.module",
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.module.asc",
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.module.sha1",
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.module.md5",
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.module.sha256",
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.module.sha512"
+            )
+
+        assertThat(moduleBundleFile(null, moduleName, version, "linuxX64")).exists()
+        assertThat(ZipFile(moduleBundleFile(null, moduleName, version, "linuxX64").toFile()))
+            .containsExactlyInAnyOrderFiles(
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.klib",
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.klib.asc",
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.klib.sha1",
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.klib.md5",
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.klib.sha256",
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.klib.sha512",
+
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0-sources.jar",
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0-sources.jar.asc",
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0-sources.jar.sha1",
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0-sources.jar.md5",
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0-sources.jar.sha256",
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0-sources.jar.sha512",
+
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.pom",
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.pom.asc",
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.pom.sha1",
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.pom.md5",
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.pom.sha256",
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.pom.sha512",
+
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.module",
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.module.asc",
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.module.sha1",
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.module.md5",
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.module.sha256",
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.module.sha512"
+            )
+    }
+
+    private fun moduleBundleFile(gradleModuleName: String?, moduleName: String, version: String, publicationName: String? = null) =
+        testProjectDir.toPath().let { path -> gradleModuleName?.let { path.resolve(it) } ?: path }.resolve("build").resolve("distributions")
+            .resolve("$moduleName-${publicationName?.let { "$it-" } ?: ""}$version.zip")
 
     private companion object {
         @TempDir

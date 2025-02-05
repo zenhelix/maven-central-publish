@@ -3,13 +3,17 @@ package io.github.zenhelix.gradle.plugin.task
 import org.gradle.api.DefaultTask
 import org.gradle.api.file.FileCollection
 import org.gradle.api.internal.artifacts.repositories.resolver.ExternalResourceResolver
+import org.gradle.api.provider.Property
+import org.gradle.api.provider.Provider
+import org.gradle.api.publish.PublishingExtension
+import org.gradle.api.publish.maven.internal.publication.MavenPublicationInternal
 import org.gradle.api.tasks.Input
-import org.gradle.api.tasks.InputFiles
-import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.OutputFiles
 import org.gradle.api.tasks.TaskAction
 import org.gradle.internal.hash.HashFunction
 import org.gradle.internal.hash.Hashing
+import org.gradle.kotlin.dsl.withType
+import org.gradle.plugins.signing.Sign
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.util.Locale
@@ -24,35 +28,37 @@ public abstract class CreateChecksumTask : DefaultTask() {
         }
     }
 
-    @Internal
-    public lateinit var sources: List<ArtifactInfo>
+    private val filteredArtifacts: List<ArtifactInfo>
+        get() {
+            val publication = project.extensions.getByType(PublishingExtension::class.java)
+                .publications.getByName(publicationName.get()) as MavenPublicationInternal
 
-    @InputFiles
-    public fun getSourceFiles(): List<File> = sources.map { it.file() }
+            val gav = GAV(publication.groupId, publication.artifactId, publication.version)
+            val signatureFiles = project.tasks.withType<Sign>().flatMap { it.signatureFiles }.toSet()
 
-    @Input
-    public fun getArtifactNames(): List<String> = sources.map { it.artifactName }
+            return publication.publishableArtifacts
+                .filterNot { signatureFiles.contains(it.file) }
+                .map { ArtifactInfo(it, gav) }
+        }
 
-    @OutputFiles
-    public fun getOutputFiles(): FileCollection = project.files(
-        sources.flatMap { file -> algorithms.map { hashFunction -> fileHash(file, hashFunction) } }
-    )
+    @get:Input
+    public abstract val publicationName: Property<String>
 
-    private fun fileHash(source: ArtifactInfo, hashFunction: HashFunction) =
-        File(
-            project.layout.buildDirectory
-                .dir("checksums")
-                .map { checksumsDir -> source.file().parentFile?.name?.let { checksumsDir.dir(it) } ?: checksumsDir }
-                .get().asFile,
-            "${source.artifactName}.${hashFunction.algorithm.lowercase(Locale.ROOT).replace("-", "")}"
-        )
+    @get:OutputFiles
+    public val outputChecksumFiles: Provider<FileCollection> =
+        project.provider {
+            filteredArtifacts.flatMap { artifact ->
+                algorithms.map { hashFunction -> fileHash(artifact, hashFunction) }
+            }.let { project.files(it) }
+        }
 
     @TaskAction
     public fun createChecksums() {
-        sources.forEach { sourceFile ->
+        filteredArtifacts.forEach { artifact ->
             algorithms.forEach { hashFunction ->
-                val checksumFile = fileHash(sourceFile, hashFunction)
-                checksumFile.writeBytes(checksum(sourceFile.file(), hashFunction))
+                val checksumFile = fileHash(artifact, hashFunction)
+                checksumFile.parentFile.mkdirs()
+                checksumFile.writeBytes(checksum(artifact.file(), hashFunction))
             }
         }
     }
@@ -62,5 +68,13 @@ public abstract class CreateChecksumTask : DefaultTask() {
         val formattedHashString = hash.toZeroPaddedString(hashFunction.hexDigits)
         return formattedHashString.toByteArray(StandardCharsets.US_ASCII)
     }
+
+    private fun fileHash(source: ArtifactInfo, hashFunction: HashFunction) = File(
+        project.layout.buildDirectory
+            .dir("checksums")
+            .map { checksumsDir -> source.file().parentFile?.name?.let { checksumsDir.dir(it) } ?: checksumsDir }
+            .get().asFile,
+        "${source.artifactName}.${hashFunction.algorithm.lowercase(Locale.ROOT).replace("-", "")}"
+    )
 
 }
