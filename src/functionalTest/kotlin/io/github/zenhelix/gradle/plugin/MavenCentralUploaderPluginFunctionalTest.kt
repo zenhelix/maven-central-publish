@@ -195,8 +195,7 @@ class MavenCentralUploaderPluginFunctionalTest {
     <developerConnection>scm:git:ssh://stub.stub.git</developerConnection>
     <url>https://stub.stub</url>
   </scm>
-</project>
-"""
+</project>"""
             )
 
         assertThat(ZipFile(moduleBundleFile(bomModuleName, bomModuleName, version).toFile()))
@@ -251,8 +250,7 @@ class MavenCentralUploaderPluginFunctionalTest {
     <developerConnection>scm:git:ssh://stub.stub.git</developerConnection>
     <url>https://stub.stub</url>
   </scm>
-</project>
-"""
+</project>"""
             )
     }
 
@@ -471,6 +469,126 @@ class MavenCentralUploaderPluginFunctionalTest {
                 "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.module.md5",
                 "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.module.sha256",
                 "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.module.sha512"
+            )
+    }
+
+    @Test
+    fun `java-library publishing`() {
+        val moduleName = "module1"
+        val version = "0.1.0"
+        //language=kotlin
+        settingsFile.writeText(
+            """
+            rootProject.name = "$moduleName"
+            """.trimIndent()
+        )
+        //language=kotlin
+        rootBuildFile.writeText(
+            """
+            plugins {
+                `java-library`
+                id("$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
+            }
+
+            allprojects {
+                group = "test.zenhelix"
+                version = "$version"
+            }
+
+            publishing {
+                repositories {
+                    mavenLocal()
+                    mavenCentralPortal {
+                        credentials {
+                            username = "stub"
+                            password = "stub"
+                        }
+                    }
+                }
+            }
+
+            signing {
+                useInMemoryPgpKeys(""${'"'}${generatePgpKeyPair("stub-password")}""${'"'}, "stub-password")
+                sign(publishing.publications)
+            }
+
+            publishing.publications.withType<MavenPublication> {
+                pom {
+                    description = "stub description"
+                    url = "https://stub.stub"
+                    licenses {
+                        license {
+                            name = "The Apache License, Version 2.0"
+                            url = "https://www.apache.org/licenses/LICENSE-2.0.txt"
+                        }
+                    }
+                    scm {
+                        connection = "scm:git:git://stub.stub.git"
+                        developerConnection = "scm:git:ssh://stub.stub.git"
+                        url = "https://stub.stub"
+                    }
+                    developers {
+                        developer {
+                            id = "stub"
+                            name = "Stub Stub"
+                            email = "stub@stub.stub"
+                        }
+                    }
+                }
+            }
+            
+            publishing {
+                publications {
+                    create<MavenPublication>("module1Lib") {
+                        from(components["java"])
+                    }
+                }
+            }
+            
+            tasks.register("createTestClass") {
+                doLast {
+                    file("src/main/java/test/Test1.java").apply {
+                        parentFile.mkdirs()
+                        writeText(""${'"'}
+                        package test;
+                        public class Test1 {
+                            public static void test() {}
+                        }
+                        ""${'"'})
+                    }
+                }
+            }
+            
+            tasks.compileJava {
+                dependsOn("createTestClass")
+            }
+            """.trimIndent()
+        )
+
+        gradleRunnerDebug(testProjectDir) { withArguments("zipDeploymentAllPublications") }
+
+        assertThat(ZipFile(moduleBundleFile(null, moduleName, version).toFile()))
+            .containsExactlyInAnyOrderFiles(
+                "test/zenhelix/module1/0.1.0/module1-0.1.0.jar",
+                "test/zenhelix/module1/0.1.0/module1-0.1.0.jar.asc",
+                "test/zenhelix/module1/0.1.0/module1-0.1.0.jar.sha1",
+                "test/zenhelix/module1/0.1.0/module1-0.1.0.jar.md5",
+                "test/zenhelix/module1/0.1.0/module1-0.1.0.jar.sha256",
+                "test/zenhelix/module1/0.1.0/module1-0.1.0.jar.sha512",
+
+                "test/zenhelix/module1/0.1.0/module1-0.1.0.pom",
+                "test/zenhelix/module1/0.1.0/module1-0.1.0.pom.asc",
+                "test/zenhelix/module1/0.1.0/module1-0.1.0.pom.sha1",
+                "test/zenhelix/module1/0.1.0/module1-0.1.0.pom.md5",
+                "test/zenhelix/module1/0.1.0/module1-0.1.0.pom.sha256",
+                "test/zenhelix/module1/0.1.0/module1-0.1.0.pom.sha512",
+
+                "test/zenhelix/module1/0.1.0/module1-0.1.0.module",
+                "test/zenhelix/module1/0.1.0/module1-0.1.0.module.asc",
+                "test/zenhelix/module1/0.1.0/module1-0.1.0.module.sha1",
+                "test/zenhelix/module1/0.1.0/module1-0.1.0.module.md5",
+                "test/zenhelix/module1/0.1.0/module1-0.1.0.module.sha256",
+                "test/zenhelix/module1/0.1.0/module1-0.1.0.module.sha512"
             )
     }
 

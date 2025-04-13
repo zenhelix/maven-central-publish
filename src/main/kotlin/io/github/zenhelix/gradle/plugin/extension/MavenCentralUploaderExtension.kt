@@ -39,6 +39,9 @@ public open class MavenCentralUploaderCredentialExtension @Inject constructor(ob
 }
 
 public open class UploaderSettingsExtension @Inject constructor(objects: ObjectFactory) {
+
+    public val aggregatePublications: Property<Boolean> = objects.property<Boolean>().convention(false)
+
     public val maxRetriesStatusCheck: Property<Int> = objects.property<Int>().convention(DEFAULT_MAX_RETRIES)
     public val delayRetriesStatusCheck: Property<Duration> = objects.property<Duration>().convention(DEFAULT_DELAY_RETRIES)
 

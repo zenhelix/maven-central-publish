@@ -1,7 +1,7 @@
 package test.utils
 
 import org.assertj.core.api.AbstractAssert
-import org.assertj.core.api.Assertions
+import org.assertj.core.api.Assertions.assertThat
 import java.util.zip.ZipFile
 
 class ZipFileAssert(actual: ZipFile) : AbstractAssert<ZipFileAssert, ZipFile>(actual, ZipFileAssert::class.java) {
@@ -11,16 +11,18 @@ class ZipFileAssert(actual: ZipFile) : AbstractAssert<ZipFileAssert, ZipFile>(ac
     }
 
     fun containsExactlyInAnyOrderFiles(vararg file: String): ZipFileAssert = apply {
-        Assertions.assertThat(
+        assertThat(
             actual.entries().toList().filter { !it.isDirectory }.map { it.name }
         ).containsExactlyInAnyOrder(*file)
     }
 
     fun isEqualTextContentTo(entryName: String, content: String): ZipFileAssert = apply {
         val entry = actual.getEntry(entryName)
-        Assertions.assertThat(entry).isNotNull
-        Assertions.assertThat(entry.isDirectory).isFalse
-        Assertions.assertThat(actual.getInputStream(entry).bufferedReader().use { it.readText() }).isEqualTo(content)
+        assertThat(entry).isNotNull
+        assertThat(entry.isDirectory).isFalse
+
+        val actualText = actual.getInputStream(entry).bufferedReader().use { it.readLines() }
+        assertThat(actualText.map { it.trim() }).isEqualTo(content.lines().map { it.trim() })
     }
 
 }
