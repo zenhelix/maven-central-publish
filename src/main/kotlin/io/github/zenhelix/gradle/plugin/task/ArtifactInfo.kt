@@ -5,7 +5,7 @@ import org.gradle.api.publish.maven.MavenPublication
 import java.io.File
 import java.io.Serializable
 
-internal data class PublicationInfo(
+public data class PublicationInfo(
     private val gav: GAV,
     val artifacts: List<ArtifactInfo>
 ) {
@@ -47,5 +47,4 @@ public data class ArtifactInfo(
             artifact.extension.takeIf { it.isNotEmpty() }?.also { append('.').append(it) }
         }
     }
-
 }

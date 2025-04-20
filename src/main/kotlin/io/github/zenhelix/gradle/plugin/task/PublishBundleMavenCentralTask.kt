@@ -7,6 +7,7 @@ import io.github.zenhelix.gradle.plugin.client.model.PublishingType
 import org.gradle.api.DefaultTask
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.Property
+import org.gradle.api.publish.plugins.PublishingPlugin.PUBLISH_TASK_GROUP
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputFile
 import org.gradle.api.tasks.Optional
@@ -37,6 +38,10 @@ public abstract class PublishBundleMavenCentralTask : DefaultTask() {
 
     @get:Input
     public abstract val delayRetriesStatusCheck: Property<Duration>
+
+    init {
+        group = PUBLISH_TASK_GROUP
+    }
 
     @TaskAction
     public fun uploadZip() {

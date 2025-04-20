@@ -7,6 +7,7 @@ import org.gradle.api.provider.Property
 import org.gradle.api.provider.Provider
 import org.gradle.api.publish.PublishingExtension
 import org.gradle.api.publish.maven.internal.publication.MavenPublicationInternal
+import org.gradle.api.publish.plugins.PublishingPlugin.PUBLISH_TASK_GROUP
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.OutputFiles
 import org.gradle.api.tasks.TaskAction
@@ -19,14 +20,6 @@ import java.nio.charset.StandardCharsets
 import java.util.Locale
 
 public abstract class CreateChecksumTask : DefaultTask() {
-
-    private val algorithms = setOf(Hashing.sha1(), Hashing.md5()).let {
-        it + if (!ExternalResourceResolver.disableExtraChecksums()) {
-            setOf(Hashing.sha256(), Hashing.sha512())
-        } else {
-            emptySet()
-        }
-    }
 
     private val filteredArtifacts: List<ArtifactInfo>
         get() {
@@ -51,6 +44,10 @@ public abstract class CreateChecksumTask : DefaultTask() {
                 algorithms.map { hashFunction -> fileHash(artifact, hashFunction) }
             }.let { project.files(it) }
         }
+
+    init {
+        group = PUBLISH_TASK_GROUP
+    }
 
     @TaskAction
     public fun createChecksums() {
@@ -77,4 +74,13 @@ public abstract class CreateChecksumTask : DefaultTask() {
         "${source.artifactName}.${hashFunction.algorithm.lowercase(Locale.ROOT).replace("-", "")}"
     )
 
+    private companion object {
+        private val algorithms = setOf(Hashing.sha1(), Hashing.md5()).let {
+            it + if (!ExternalResourceResolver.disableExtraChecksums()) {
+                setOf(Hashing.sha256(), Hashing.sha512())
+            } else {
+                emptySet()
+            }
+        }
+    }
 }

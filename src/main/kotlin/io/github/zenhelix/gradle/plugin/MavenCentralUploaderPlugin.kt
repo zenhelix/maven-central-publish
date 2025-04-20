@@ -9,6 +9,7 @@ import io.github.zenhelix.gradle.plugin.task.CreateChecksumTask
 import io.github.zenhelix.gradle.plugin.task.GAV
 import io.github.zenhelix.gradle.plugin.task.PublicationInfo
 import io.github.zenhelix.gradle.plugin.task.PublishBundleMavenCentralTask
+import io.github.zenhelix.gradle.plugin.task.ZipDeploymentTask
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.Task
@@ -18,7 +19,6 @@ import org.gradle.api.publish.maven.plugins.MavenPublishPlugin
 import org.gradle.api.publish.plugins.PublishingPlugin.PUBLISH_LIFECYCLE_TASK_NAME
 import org.gradle.api.publish.plugins.PublishingPlugin.PUBLISH_TASK_GROUP
 import org.gradle.api.tasks.TaskDependency
-import org.gradle.api.tasks.bundling.Zip
 import org.gradle.internal.extensions.stdlib.capitalized
 import org.gradle.kotlin.dsl.apply
 import org.gradle.kotlin.dsl.create
@@ -56,29 +56,20 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
                 }
 
                 val zipTask = this.registerZipPublicationTask(publicationName) {
+                    val publicationInfo = mavenPublication(publicationName).mapModel()
+
+                    this.publicationName.set(publicationName)
+                    this.needModuleName.set(mavenPublications.size > 1)
+                    this.publicationInfo.set(publicationInfo)
+
+                    configureArtifacts(createChecksums)
 
                     allTaskDependencies.forEach { this.dependsOn(it) }
                     dependsOn(createChecksums)
-
-                    if (mavenPublications.size > 1) {
-                        archiveAppendix.set(publicationName)
-                    }
-
-                    from(createChecksums) {
-                        val mavenPublicationInternal = mavenPublication(publicationName)
-                        val publicationInfo = mavenPublicationInternal.mapModel()
-
-                        into(publicationInfo.artifactPath)
-                        publicationInfo.artifacts.forEach { artifactInfo ->
-                            from(artifactInfo.file()) { rename { artifactInfo.artifactName } }
-                        }
-                    }
                 }
                 zipAllPublicationsTask.configure { dependsOn(zipTask) }
 
                 val publishPublicationTask = registerPublishPublicationTask(publicationName) {
-
-                    dependsOn(zipTask)
 
                     zipFile.set(zipTask.flatMap { it.archiveFile })
 
@@ -90,6 +81,8 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
 
                     maxRetriesStatusCheck.set(mavenCentralUploaderExtension.uploader.maxRetriesStatusCheck)
                     delayRetriesStatusCheck.set(mavenCentralUploaderExtension.uploader.delayRetriesStatusCheck)
+
+                    dependsOn(zipTask)
                 }
 
                 publishLifecycleTask.configure { dependsOn(publishPublicationTask) }
@@ -126,8 +119,8 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
         description = "Deployment bundle for all publications"
     }
 
-    private fun Project.registerZipPublicationTask(publicationName: String, configuration: Zip.() -> Unit = {}) =
-        this.tasks.register<Zip>("zipDeployment${publicationName.capitalized()}Publication") {
+    private fun Project.registerZipPublicationTask(publicationName: String, configuration: ZipDeploymentTask.() -> Unit = {}) =
+        this.tasks.register<ZipDeploymentTask>("zipDeployment${publicationName.capitalized()}Publication") {
             group = PUBLISH_TASK_GROUP
             description = "Deployment bundle for $publicationName"
 
