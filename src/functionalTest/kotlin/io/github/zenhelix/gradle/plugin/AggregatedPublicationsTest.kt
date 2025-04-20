@@ -32,7 +32,7 @@ class AggregatedPublicationsTest {
         //language=kotlin
         settingsFile.writeText(
             """
-            rootProject.name = "aggregate-test"
+            rootProject.name = "rootModule"
             
             include(
                 ":module1",
@@ -190,12 +190,12 @@ class AggregatedPublicationsTest {
         )
 
         gradleRunnerDebug(testProjectDir) {
-            withArguments("zipAggregateDeployment")
+            withArguments("zipDeploymentAllPublications")
         }.also {
             assertThat(it.output).contains("BUILD SUCCESSFUL")
         }
 
-        val aggregateZipFile = File(testProjectDir, "build/distributions/aggregate-aggregate-test-$version.zip").also {
+        val aggregateZipFile = File(testProjectDir, "build/distributions/rootModule-$version.zip").also {
             assertThat(it).exists()
         }
 
