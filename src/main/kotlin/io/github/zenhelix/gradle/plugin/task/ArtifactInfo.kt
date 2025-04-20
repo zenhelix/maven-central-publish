@@ -1,10 +1,11 @@
 package io.github.zenhelix.gradle.plugin.task
 
 import org.gradle.api.publish.maven.MavenArtifact
+import org.gradle.api.publish.maven.MavenPublication
 import java.io.File
 import java.io.Serializable
 
-internal data class PublicationInfo(
+public data class PublicationInfo(
     private val gav: GAV,
     val artifacts: List<ArtifactInfo>
 ) {
@@ -18,7 +19,11 @@ internal data class PublicationInfo(
     }
 }
 
-public data class GAV(val group: String, val module: String, val version: String)
+public data class GAV(val group: String, val module: String, val version: String) {
+    internal companion object {
+        internal fun of(publication: MavenPublication) = GAV(publication.groupId, publication.artifactId, publication.version)
+    }
+}
 
 public data class ArtifactInfo(
     private val artifact: MavenArtifact,
@@ -42,5 +47,4 @@ public data class ArtifactInfo(
             artifact.extension.takeIf { it.isNotEmpty() }?.also { append('.').append(it) }
         }
     }
-
 }
