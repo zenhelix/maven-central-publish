@@ -37,7 +37,7 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
 
         val mavenCentralUploaderExtension = target.createExtension()
 
-        val publishLifecycleTask = target.tasks.named(PUBLISH_LIFECYCLE_TASK_NAME);
+        val publishLifecycleTask = target.findPublishLifecycleTask()
 
         val publishAllPublicationsTask = target.registerPublishAllPublicationsTask()
         val zipAllPublicationsTask = target.registerZipAllPublicationsTask()
@@ -98,6 +98,7 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
 
     private fun Project.mavenPublications() = this.extensions.findByType<PublishingExtension>()?.publications?.withType<MavenPublicationInternal>()
 
+    private fun Project.findPublishLifecycleTask() = this.tasks.named(PUBLISH_LIFECYCLE_TASK_NAME)
     private fun Project.registerPublishAllPublicationsTask() = this.tasks
         .register<Task>("publishAllPublicationsTo${MAVEN_CENTRAL_PORTAL_NAME.capitalized()}Repository") {
             group = PUBLISH_TASK_GROUP

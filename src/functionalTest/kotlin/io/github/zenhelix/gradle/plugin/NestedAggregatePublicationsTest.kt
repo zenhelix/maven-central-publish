@@ -280,7 +280,7 @@ class NestedAggregatePublicationsTest {
 
         // Проверяем создание архивов для агрегированной публикации moduleA
         gradleRunnerDebug(testProjectDir) {
-            withArguments("zipAggregateDeployment")
+            withArguments("zipDeploymentAllPublications")
         }.also {
             assertThat(it.output).contains("BUILD SUCCESSFUL")
         }
