@@ -16,10 +16,16 @@ public abstract class ZipDeploymentTask : Zip() {
 
     public fun configureArtifacts() {
         publicationInfos.get().forEach { info ->
-            into(info.artifactPath)
-            from(info.checksumTask)
+            info.checksumTask?.also { checksumTask ->
+                from(checksumTask) {
+                    into(info.artifactPath)
+                }
+            }
             info.artifacts.forEach { artifactInfo ->
-                from(artifactInfo.file()) { rename { artifactInfo.artifactName } }
+                from(artifactInfo.file()) {
+                    into(info.artifactPath)
+                    rename { artifactInfo.artifactName }
+                }
             }
         }
     }

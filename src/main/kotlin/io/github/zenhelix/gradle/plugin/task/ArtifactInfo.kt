@@ -10,7 +10,7 @@ public data class PublicationInfo(
     private val gav: GAV,
     val publicationName: String,
     val artifacts: List<ArtifactInfo>,
-    val checksumTask: TaskProvider<CreateChecksumTask>
+    val checksumTask: TaskProvider<CreateChecksumTask>?
 ) {
 
     val artifactPath: String by lazy {

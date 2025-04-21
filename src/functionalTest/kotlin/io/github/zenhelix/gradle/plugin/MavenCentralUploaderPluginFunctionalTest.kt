@@ -19,7 +19,8 @@ class MavenCentralUploaderPluginFunctionalTest {
         rootBuildFile = File(testProjectDir, "build.gradle.kts")
     }
 
-    @Test fun `zip deployment bundles for platform and catalog`() {
+    @Test
+    fun `zip deployment bundles for platform and catalog`() {
         val version = "0.1.0"
         val tomlModuleName = "platform-toml"
         val bomModuleName = "platform-bom"
@@ -254,7 +255,8 @@ class MavenCentralUploaderPluginFunctionalTest {
             )
     }
 
-    @Test fun `kmm publishing`() {
+    @Test
+    fun `kmm publishing`() {
         val moduleName = "test"
         val version = "0.1.0"
         //language=kotlin
@@ -442,6 +444,218 @@ class MavenCentralUploaderPluginFunctionalTest {
         assertThat(moduleBundleFile(null, moduleName, version, "linuxX64")).exists()
         assertThat(ZipFile(moduleBundleFile(null, moduleName, version, "linuxX64").toFile()))
             .containsExactlyInAnyOrderFiles(
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.klib",
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.klib.asc",
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.klib.sha1",
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.klib.md5",
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.klib.sha256",
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.klib.sha512",
+
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0-sources.jar",
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0-sources.jar.asc",
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0-sources.jar.sha1",
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0-sources.jar.md5",
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0-sources.jar.sha256",
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0-sources.jar.sha512",
+
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.pom",
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.pom.asc",
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.pom.sha1",
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.pom.md5",
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.pom.sha256",
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.pom.sha512",
+
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.module",
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.module.asc",
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.module.sha1",
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.module.md5",
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.module.sha256",
+                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.module.sha512"
+            )
+    }
+
+    @Test
+    fun `kmm publishing in aggregation publications`() {
+        val moduleName = "test"
+        val version = "0.1.0"
+        //language=kotlin
+        settingsFile.writeText(
+            """
+            rootProject.name = "$moduleName"
+    
+            dependencyResolutionManagement {
+                repositories {
+                    mavenCentral()
+                    google()
+                    mavenLocal()
+                }
+            }
+
+            pluginManagement {
+                repositories {
+                    gradlePluginPortal()
+                    google()
+                    mavenLocal()
+                }
+            }
+            """.trimIndent()
+        )
+        //language=kotlin
+        rootBuildFile.writeText(
+            """
+            import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
+            plugins {
+                id("com.android.library") version "8.2.0"
+                id("org.jetbrains.kotlin.multiplatform") version "2.1.0"
+
+                id("$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
+            }
+
+            allprojects {
+                group = "test.zenhelix"
+            }
+
+            publishing {
+                repositories {
+                    mavenLocal()
+                    mavenCentralPortal {
+                        credentials {
+                            username = "stub"
+                            password = "stub"
+                        }
+                        uploader { aggregate { modulePublications = true } }
+                    }
+                }
+            }
+
+            signing {
+                useInMemoryPgpKeys(""${'"'}${generatePgpKeyPair("stub-password")}""${'"'}, "stub-password")
+                sign(publishing.publications)
+            }
+
+            publishing.publications.withType<MavenPublication> {
+                pom {
+                    description = "stub description"
+                    url = "https://stub.stub"
+                    licenses {
+                        license {
+                            name = "The Apache License, Version 2.0"
+                            url = "https://www.apache.org/licenses/LICENSE-2.0.txt"
+                        }
+                    }
+                    scm {
+                        connection = "scm:git:git://stub.stub.git"
+                        developerConnection = "scm:git:ssh://stub.stub.git"
+                        url = "https://stub.stub"
+                    }
+                    developers {
+                        developer {
+                            id = "stub"
+                            name = "Stub Stub"
+                            email = "stub@stub.stub"
+                        }
+                    }
+                }
+            }
+
+            kotlin {
+                jvm()
+                androidTarget {
+                    publishLibraryVariants("release")
+                    compilerOptions {
+                        jvmTarget.set(JvmTarget.JVM_1_8)
+                    }
+                }
+                linuxX64()
+            }
+
+            android {
+                namespace = "test"
+                compileSdk = 34
+                defaultConfig {
+                    minSdk = 24
+                }
+            }
+            """.trimIndent()
+        )
+
+        File(testProjectDir, "src/commonMain/kotlin/test/TestFile.kt").also { it.parentFile.mkdirs() }.writeText(
+            """
+            package test
+            
+            fun generate() {}
+            """.trimIndent()
+        )
+
+        gradleRunnerDebug(testProjectDir) { withArguments("zipDeploymentAllPublications", "-Pversion=$version") }
+
+        assertThat(moduleBundleFile(null, moduleName, version)).exists()
+        assertThat(ZipFile(moduleBundleFile(null, moduleName, version).toFile()))
+            .containsExactlyInAnyOrderFiles(
+                "test/zenhelix/test/0.1.0/test-0.1.0.jar",
+                "test/zenhelix/test/0.1.0/test-0.1.0.jar.asc",
+                "test/zenhelix/test/0.1.0/test-0.1.0.jar.sha1",
+                "test/zenhelix/test/0.1.0/test-0.1.0.jar.md5",
+                "test/zenhelix/test/0.1.0/test-0.1.0.jar.sha256",
+                "test/zenhelix/test/0.1.0/test-0.1.0.jar.sha512",
+
+                "test/zenhelix/test/0.1.0/test-0.1.0-sources.jar",
+                "test/zenhelix/test/0.1.0/test-0.1.0-sources.jar.asc",
+                "test/zenhelix/test/0.1.0/test-0.1.0-sources.jar.sha1",
+                "test/zenhelix/test/0.1.0/test-0.1.0-sources.jar.md5",
+                "test/zenhelix/test/0.1.0/test-0.1.0-sources.jar.sha256",
+                "test/zenhelix/test/0.1.0/test-0.1.0-sources.jar.sha512",
+
+                "test/zenhelix/test/0.1.0/test-0.1.0.pom",
+                "test/zenhelix/test/0.1.0/test-0.1.0.pom.asc",
+                "test/zenhelix/test/0.1.0/test-0.1.0.pom.sha1",
+                "test/zenhelix/test/0.1.0/test-0.1.0.pom.md5",
+                "test/zenhelix/test/0.1.0/test-0.1.0.pom.sha256",
+                "test/zenhelix/test/0.1.0/test-0.1.0.pom.sha512",
+
+                "test/zenhelix/test/0.1.0/test-0.1.0.module",
+                "test/zenhelix/test/0.1.0/test-0.1.0.module.asc",
+                "test/zenhelix/test/0.1.0/test-0.1.0.module.sha1",
+                "test/zenhelix/test/0.1.0/test-0.1.0.module.md5",
+                "test/zenhelix/test/0.1.0/test-0.1.0.module.sha256",
+                "test/zenhelix/test/0.1.0/test-0.1.0.module.sha512",
+
+                "test/zenhelix/test/0.1.0/test-0.1.0-kotlin-tooling-metadata.json",
+                "test/zenhelix/test/0.1.0/test-0.1.0-kotlin-tooling-metadata.json.asc",
+                "test/zenhelix/test/0.1.0/test-0.1.0-kotlin-tooling-metadata.json.sha1",
+                "test/zenhelix/test/0.1.0/test-0.1.0-kotlin-tooling-metadata.json.md5",
+                "test/zenhelix/test/0.1.0/test-0.1.0-kotlin-tooling-metadata.json.sha256",
+                "test/zenhelix/test/0.1.0/test-0.1.0-kotlin-tooling-metadata.json.sha512",
+
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.jar",
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.jar.asc",
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.jar.sha1",
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.jar.md5",
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.jar.sha256",
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.jar.sha512",
+
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0-sources.jar",
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0-sources.jar.asc",
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0-sources.jar.sha1",
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0-sources.jar.md5",
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0-sources.jar.sha256",
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0-sources.jar.sha512",
+
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.pom",
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.pom.asc",
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.pom.sha1",
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.pom.md5",
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.pom.sha256",
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.pom.sha512",
+
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.module",
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.module.asc",
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.module.sha1",
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.module.md5",
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.module.sha256",
+                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.module.sha512",
+
                 "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.klib",
                 "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.klib.asc",
                 "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.klib.sha1",
