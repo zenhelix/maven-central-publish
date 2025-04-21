@@ -70,7 +70,7 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
                     if (mavenPublications.size > 1) {
                         this.archiveAppendix.set(publicationName)
                     }
-                    this.publicationInfo.set(publicationInfo)
+                    this.publicationInfos.set(listOf(publicationInfo))
 
                     configureArtifacts()
                 }
