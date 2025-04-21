@@ -10,22 +10,21 @@ import io.github.zenhelix.gradle.plugin.task.GAV
 import io.github.zenhelix.gradle.plugin.task.PublicationInfo
 import io.github.zenhelix.gradle.plugin.task.PublishBundleMavenCentralTask
 import io.github.zenhelix.gradle.plugin.task.ZipDeploymentTask
+import io.github.zenhelix.gradle.plugin.utils.findMavenPublications
+import io.github.zenhelix.gradle.plugin.utils.findPublishLifecycleTask
+import io.github.zenhelix.gradle.plugin.utils.mavenPublication
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.Task
-import org.gradle.api.publish.PublishingExtension
 import org.gradle.api.publish.maven.internal.publication.MavenPublicationInternal
 import org.gradle.api.publish.maven.plugins.MavenPublishPlugin
-import org.gradle.api.publish.plugins.PublishingPlugin.PUBLISH_LIFECYCLE_TASK_NAME
 import org.gradle.api.publish.plugins.PublishingPlugin.PUBLISH_TASK_GROUP
 import org.gradle.api.tasks.TaskDependency
 import org.gradle.api.tasks.TaskProvider
 import org.gradle.internal.extensions.stdlib.capitalized
 import org.gradle.kotlin.dsl.apply
 import org.gradle.kotlin.dsl.create
-import org.gradle.kotlin.dsl.findByType
 import org.gradle.kotlin.dsl.register
-import org.gradle.kotlin.dsl.withType
 import org.gradle.plugins.signing.SigningPlugin
 
 public class MavenCentralUploaderPlugin : Plugin<Project> {
@@ -44,7 +43,7 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
         val zipAllPublicationsTask = target.registerZipAllPublicationsTask()
 
         target.afterEvaluate {
-            val mavenPublications = this.mavenPublications() ?: emptyList()
+            val mavenPublications = this.findMavenPublications() ?: emptyList()
 
             val allTaskDependencies = mutableListOf<TaskDependency>()
             mavenPublications.forEach { it.allPublishableArtifacts { allTaskDependencies.add(buildDependencies) } }
@@ -107,12 +106,6 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
 
     private fun Project.createExtension() = this.extensions.create<MavenCentralUploaderExtension>(MAVEN_CENTRAL_UPLOADER_EXTENSION_NAME)
 
-    private fun Project.mavenPublication(publicationName: String) = this.extensions
-        .getByType(PublishingExtension::class.java).publications.getByName(publicationName) as MavenPublicationInternal
-
-    private fun Project.mavenPublications() = this.extensions.findByType<PublishingExtension>()?.publications?.withType<MavenPublicationInternal>()
-
-    private fun Project.findPublishLifecycleTask() = this.tasks.named(PUBLISH_LIFECYCLE_TASK_NAME)
     private fun Project.registerPublishAllPublicationsTask() = this.tasks
         .register<Task>("publishAllPublicationsTo${MAVEN_CENTRAL_PORTAL_NAME.capitalized()}Repository") {
             group = PUBLISH_TASK_GROUP

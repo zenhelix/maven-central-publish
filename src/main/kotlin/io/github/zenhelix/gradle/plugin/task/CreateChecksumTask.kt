@@ -1,12 +1,11 @@
 package io.github.zenhelix.gradle.plugin.task
 
+import io.github.zenhelix.gradle.plugin.utils.mavenPublication
 import org.gradle.api.DefaultTask
 import org.gradle.api.file.FileCollection
 import org.gradle.api.internal.artifacts.repositories.resolver.ExternalResourceResolver
 import org.gradle.api.provider.Property
 import org.gradle.api.provider.Provider
-import org.gradle.api.publish.PublishingExtension
-import org.gradle.api.publish.maven.internal.publication.MavenPublicationInternal
 import org.gradle.api.publish.plugins.PublishingPlugin.PUBLISH_TASK_GROUP
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.OutputFiles
@@ -23,8 +22,7 @@ public abstract class CreateChecksumTask : DefaultTask() {
 
     private val filteredArtifacts: List<ArtifactInfo>
         get() {
-            val publication = project.extensions.getByType(PublishingExtension::class.java)
-                .publications.getByName(publicationName.get()) as MavenPublicationInternal
+            val publication = project.mavenPublication(publicationName.get())
 
             val gav = GAV(publication.groupId, publication.artifactId, publication.version)
             val signatureFiles = project.tasks.withType<Sign>().flatMap { it.signatureFiles }.toSet()
