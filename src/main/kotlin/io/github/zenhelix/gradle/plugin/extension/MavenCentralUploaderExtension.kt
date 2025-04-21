@@ -40,7 +40,10 @@ public open class MavenCentralUploaderCredentialExtension @Inject constructor(ob
 
 public open class UploaderSettingsExtension @Inject constructor(objects: ObjectFactory) {
 
-    public val aggregatePublications: Property<Boolean> = objects.property<Boolean>().convention(false)
+    public val aggregate: AggregateSettingsExtension = objects.newInstance<AggregateSettingsExtension>()
+    public fun aggregate(configure: Action<AggregateSettingsExtension>) {
+        configure.execute(aggregate)
+    }
 
     public val maxRetriesStatusCheck: Property<Int> = objects.property<Int>().convention(DEFAULT_MAX_RETRIES)
     public val delayRetriesStatusCheck: Property<Duration> = objects.property<Duration>().convention(DEFAULT_DELAY_RETRIES)
@@ -49,4 +52,17 @@ public open class UploaderSettingsExtension @Inject constructor(objects: ObjectF
         public const val DEFAULT_MAX_RETRIES: Int = 5
         public val DEFAULT_DELAY_RETRIES: Duration = Duration.ofSeconds(2)
     }
+}
+
+public open class AggregateSettingsExtension @Inject constructor(objects: ObjectFactory) {
+
+    /**
+     * Aggregate publications into a single archive for each module
+     */
+    public val modulePublications: Property<Boolean> = objects.property<Boolean>().convention(false)
+
+    /**
+     * Aggregate submodules into a single archive
+     */
+    public val modules: Property<Boolean> = objects.property<Boolean>().convention(false)
 }

@@ -7,6 +7,7 @@ import java.io.Serializable
 
 public data class PublicationInfo(
     private val gav: GAV,
+    val publicationName: String,
     val artifacts: List<ArtifactInfo>
 ) {
 

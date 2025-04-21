@@ -10,22 +10,8 @@ public abstract class ZipDeploymentTask : Zip() {
     @get:Internal
     public abstract val publicationInfo: Property<PublicationInfo>
 
-    @get:Internal
-    public abstract val publicationName: Property<String>
-
-    @get:Internal
-    public abstract val needModuleName: Property<Boolean>
-
     init {
         group = PUBLISH_TASK_GROUP
-
-        archiveAppendix.convention(project.provider {
-            if (needModuleName.getOrElse(false)) {
-                publicationName.getOrElse("")
-            } else {
-                ""
-            }
-        })
     }
 
     public fun configureArtifacts(vararg from: Any) {

@@ -58,8 +58,9 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
                 val zipTask = this.registerZipPublicationTask(publicationName) {
                     val publicationInfo = mavenPublication(publicationName).mapModel()
 
-                    this.publicationName.set(publicationName)
-                    this.needModuleName.set(mavenPublications.size > 1)
+                    if (mavenPublications.size > 1) {
+                        this.archiveAppendix.set(publicationName)
+                    }
                     this.publicationInfo.set(publicationInfo)
 
                     configureArtifacts(createChecksums)
@@ -141,7 +142,11 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
     }
 
     private fun MavenPublicationInternal.mapModel() =
-        PublicationInfo(gav = GAV.of(this), artifacts = this.publishableArtifacts.map { ArtifactInfo(artifact = it, gav = GAV.of(this)) })
+        PublicationInfo(
+            gav = GAV.of(this),
+            publicationName = this.name,
+            artifacts = this.publishableArtifacts.map { ArtifactInfo(artifact = it, gav = GAV.of(this)) }
+        )
 
     private fun PublishingType.mapModel() = when (this) {
         PublishingType.AUTOMATIC -> io.github.zenhelix.gradle.plugin.client.model.PublishingType.AUTOMATIC
