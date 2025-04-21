@@ -2,12 +2,15 @@ package io.github.zenhelix.gradle.plugin.task
 
 import org.gradle.api.publish.maven.MavenArtifact
 import org.gradle.api.publish.maven.MavenPublication
+import org.gradle.api.tasks.TaskProvider
 import java.io.File
 import java.io.Serializable
 
 public data class PublicationInfo(
     private val gav: GAV,
-    val artifacts: List<ArtifactInfo>
+    val publicationName: String,
+    val artifacts: List<ArtifactInfo>,
+    val checksumTask: TaskProvider<CreateChecksumTask>?
 ) {
 
     val artifactPath: String by lazy {
