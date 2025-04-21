@@ -46,7 +46,6 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
                     target.allprojects.forEach { project ->
                         val mavenPublications = project.findMavenPublications() ?: emptyList()
 
-                        println("Target: $target project: $project publications: ${mavenPublications.map { it.name }}")
                         mavenPublications.forEach { it.allPublishableArtifacts { allTaskDependencies.add(buildDependencies) } }
 
                         val createChecksumsTasks = mavenPublications.associate { mavenPublication ->
