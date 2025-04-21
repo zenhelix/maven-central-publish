@@ -36,12 +36,11 @@ public abstract class CreateChecksumTask : DefaultTask() {
     public abstract val publicationName: Property<String>
 
     @get:OutputFiles
-    public val outputChecksumFiles: Provider<FileCollection> =
-        project.provider {
-            filteredArtifacts.flatMap { artifact ->
-                algorithms.map { hashFunction -> fileHash(artifact, hashFunction) }
-            }.let { project.files(it) }
-        }
+    public val outputChecksumFiles: Provider<FileCollection> = project.provider {
+        filteredArtifacts.flatMap { artifact ->
+            algorithms.map { hashFunction -> fileHash(artifact, hashFunction) }
+        }.let { project.files(it) }
+    }
 
     init {
         group = PUBLISH_TASK_GROUP

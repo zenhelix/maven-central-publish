@@ -41,6 +41,7 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
 
         val publishAllPublicationsTask = target.registerPublishAllPublicationsTask()
         val zipAllPublicationsTask = target.registerZipAllPublicationsTask()
+        val checksumsAllPublicationsTask = target.registerCreateChecksumsAllPublicationsTask()
 
         target.afterEvaluate {
             val mavenPublications = this.findMavenPublications() ?: emptyList()
@@ -51,12 +52,13 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
             val createChecksumsTasks = mavenPublications.associate { mavenPublication ->
                 val publicationName = mavenPublication.name
 
-                val createChecksumsTask = this.registerCreateChecksums(publicationName) {
+                val createChecksumsTask = this.registerCreatePublicationChecksumsTask(publicationName) {
                     allTaskDependencies.forEach { this.dependsOn(it) }
                 }
 
                 publicationName to createChecksumsTask
             }
+            createChecksumsTasks.values.forEach { checksumsAllPublicationsTask.configure { dependsOn(it) } }
 
             val zipTasks = createChecksumsTasks.mapValues { (publicationName, createChecksumsTask) ->
                 val zipTask = this.registerZipPublicationTask(publicationName) {
@@ -112,7 +114,12 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
             description = "Publishes all Maven publications produced by this project to the $MAVEN_CENTRAL_PORTAL_NAME repository."
         }
 
-    private fun Project.registerCreateChecksums(publicationName: String, configuration: CreateChecksumTask.() -> Unit = {}) =
+    private fun Project.registerCreateChecksumsAllPublicationsTask() = this.tasks.register<Task>("checksumAllPublications") {
+        group = PUBLISH_TASK_GROUP
+        description = "Generate checksums"
+    }
+
+    private fun Project.registerCreatePublicationChecksumsTask(publicationName: String, configuration: CreateChecksumTask.() -> Unit = {}) =
         this.tasks.register<CreateChecksumTask>("checksum${publicationName.capitalized()}") {
             group = PUBLISH_TASK_GROUP
             description = "Generate checksums for $publicationName"
