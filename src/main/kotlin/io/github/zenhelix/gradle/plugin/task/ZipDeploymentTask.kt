@@ -14,11 +14,11 @@ public abstract class ZipDeploymentTask : Zip() {
         group = PUBLISH_TASK_GROUP
     }
 
-    public fun configureArtifacts(vararg from: Any) {
+    public fun configureArtifacts() {
         val info = publicationInfo.get()
 
         into(info.artifactPath)
-        from(from)
+        from(info.checksumTask)
         info.artifacts.forEach { artifactInfo ->
             from(artifactInfo.file()) { rename { artifactInfo.artifactName } }
         }

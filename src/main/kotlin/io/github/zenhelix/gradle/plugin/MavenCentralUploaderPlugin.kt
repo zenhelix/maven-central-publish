@@ -19,6 +19,7 @@ import org.gradle.api.publish.maven.plugins.MavenPublishPlugin
 import org.gradle.api.publish.plugins.PublishingPlugin.PUBLISH_LIFECYCLE_TASK_NAME
 import org.gradle.api.publish.plugins.PublishingPlugin.PUBLISH_TASK_GROUP
 import org.gradle.api.tasks.TaskDependency
+import org.gradle.api.tasks.TaskProvider
 import org.gradle.internal.extensions.stdlib.capitalized
 import org.gradle.kotlin.dsl.apply
 import org.gradle.kotlin.dsl.create
@@ -63,14 +64,14 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
                     allTaskDependencies.forEach { this.dependsOn(it) }
                     dependsOn(createChecksumsTask)
 
-                    val publicationInfo = mavenPublication(publicationName).mapModel()
+                    val publicationInfo = mavenPublication(publicationName).mapModel(createChecksumsTask)
 
                     if (mavenPublications.size > 1) {
                         this.archiveAppendix.set(publicationName)
                     }
                     this.publicationInfo.set(publicationInfo)
 
-                    configureArtifacts(createChecksumsTask)
+                    configureArtifacts()
                 }
 
                 zipTask
@@ -153,12 +154,12 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
         credentials.password.map { password -> Credentials.UsernamePasswordCredentials(username, password) }
     }
 
-    private fun MavenPublicationInternal.mapModel() =
-        PublicationInfo(
-            gav = GAV.of(this),
-            publicationName = this.name,
-            artifacts = this.publishableArtifacts.map { ArtifactInfo(artifact = it, gav = GAV.of(this)) }
-        )
+    private fun MavenPublicationInternal.mapModel(checksumTask: TaskProvider<CreateChecksumTask>) = PublicationInfo(
+        gav = GAV.of(this),
+        publicationName = this.name,
+        artifacts = this.publishableArtifacts.map { ArtifactInfo(artifact = it, gav = GAV.of(this)) },
+        checksumTask = checksumTask
+    )
 
     private fun PublishingType.mapModel() = when (this) {
         PublishingType.AUTOMATIC -> io.github.zenhelix.gradle.plugin.client.model.PublishingType.AUTOMATIC
