@@ -43,19 +43,26 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
         val zipAllPublicationsTask = target.registerZipAllPublicationsTask()
 
         target.afterEvaluate {
-            val mavenPublications = this.mavenPublications()
+            val mavenPublications = this.mavenPublications() ?: emptyList()
 
             val allTaskDependencies = mutableListOf<TaskDependency>()
-            mavenPublications?.forEach { it.allPublishableArtifacts { allTaskDependencies.add(buildDependencies) } }
+            mavenPublications.forEach { it.allPublishableArtifacts { allTaskDependencies.add(buildDependencies) } }
 
-            mavenPublications?.forEach { publication ->
-                val publicationName = publication.name
+            val createChecksumsTasks = mavenPublications.associate { mavenPublication ->
+                val publicationName = mavenPublication.name
 
-                val createChecksums = this.registerCreateChecksums(publicationName) {
+                val createChecksumsTask = this.registerCreateChecksums(publicationName) {
                     allTaskDependencies.forEach { this.dependsOn(it) }
                 }
 
+                publicationName to createChecksumsTask
+            }
+
+            val zipTasks = createChecksumsTasks.mapValues { (publicationName, createChecksumsTask) ->
                 val zipTask = this.registerZipPublicationTask(publicationName) {
+                    allTaskDependencies.forEach { this.dependsOn(it) }
+                    dependsOn(createChecksumsTask)
+
                     val publicationInfo = mavenPublication(publicationName).mapModel()
 
                     if (mavenPublications.size > 1) {
@@ -63,14 +70,17 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
                     }
                     this.publicationInfo.set(publicationInfo)
 
-                    configureArtifacts(createChecksums)
-
-                    allTaskDependencies.forEach { this.dependsOn(it) }
-                    dependsOn(createChecksums)
+                    configureArtifacts(createChecksumsTask)
                 }
-                zipAllPublicationsTask.configure { dependsOn(zipTask) }
 
+                zipTask
+            }
+
+            zipTasks.values.forEach { zipAllPublicationsTask.configure { dependsOn(it) } }
+
+            val publishPublicationTasks = zipTasks.mapValues { (publicationName, zipTask) ->
                 val publishPublicationTask = registerPublishPublicationTask(publicationName) {
+                    dependsOn(zipTask)
 
                     zipFile.set(zipTask.flatMap { it.archiveFile })
 
@@ -82,12 +92,14 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
 
                     maxRetriesStatusCheck.set(mavenCentralUploaderExtension.uploader.maxRetriesStatusCheck)
                     delayRetriesStatusCheck.set(mavenCentralUploaderExtension.uploader.delayRetriesStatusCheck)
-
-                    dependsOn(zipTask)
                 }
 
-                publishLifecycleTask.configure { dependsOn(publishPublicationTask) }
-                publishAllPublicationsTask.configure { dependsOn(publishPublicationTask) }
+                publishPublicationTask
+            }
+
+            publishPublicationTasks.values.forEach {
+                publishLifecycleTask.configure { dependsOn(it) }
+                publishAllPublicationsTask.configure { dependsOn(it) }
             }
         }
     }
