@@ -94,7 +94,7 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
 
     private fun Project.createExtension() = this.extensions.create<MavenCentralUploaderExtension>(MAVEN_CENTRAL_UPLOADER_EXTENSION_NAME)
 
-    private fun Project.mavenPublication(publicationName: String) = project.extensions
+    private fun Project.mavenPublication(publicationName: String) = this.extensions
         .getByType(PublishingExtension::class.java).publications.getByName(publicationName) as MavenPublicationInternal
 
     private fun Project.mavenPublications() = this.extensions.findByType<PublishingExtension>()?.publications?.withType<MavenPublicationInternal>()
