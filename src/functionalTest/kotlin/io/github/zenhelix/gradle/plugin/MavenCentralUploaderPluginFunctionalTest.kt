@@ -5,6 +5,7 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import test.utils.BuildResultAssert.Companion.assertThat
 import test.utils.PgpUtils.generatePgpKeyPair
 import test.utils.ZipFileAssert.Companion.assertThat
 import test.utils.gradleRunnerDebug
@@ -132,7 +133,9 @@ class MavenCentralUploaderPluginFunctionalTest {
             """.trimIndent()
         )
 
-        gradleRunnerDebug(testProjectDir) { withArguments("zipDeploymentAllPublications", "-Pversion=$version") }
+        assertThat(
+            gradleRunnerDebug(testProjectDir) { withTask("zipDeploymentAllPublications").withVersion(version) }
+        ).successfulBuild()
 
         assertThat(moduleBundleFile(tomlModuleName, tomlModuleName, version)).exists()
         assertThat(moduleBundleFile(bomModuleName, bomModuleName, version)).exists()
@@ -367,8 +370,9 @@ class MavenCentralUploaderPluginFunctionalTest {
             fun generate() {}
             """.trimIndent()
         )
-
-        gradleRunnerDebug(testProjectDir) { withArguments("zipDeploymentAllPublications", "-Pversion=$version") }
+        assertThat(
+            gradleRunnerDebug(testProjectDir) { withTask("zipDeploymentAllPublications").withVersion(version) }
+        ).successfulBuild()
 
         assertThat(moduleBundleFile(null, moduleName, version, "kotlinMultiplatform")).exists()
         assertThat(ZipFile(moduleBundleFile(null, moduleName, version, "kotlinMultiplatform").toFile()))
@@ -588,7 +592,7 @@ class MavenCentralUploaderPluginFunctionalTest {
             """.trimIndent()
         )
 
-        gradleRunnerDebug(testProjectDir) { withArguments("zipDeploymentAllPublications", "-Pversion=$version") }
+        gradleRunnerDebug(testProjectDir) { withTask("zipDeploymentAllPublications").withVersion(version) }
 
         assertThat(moduleBundleFile(null, moduleName, version)).exists()
         assertThat(ZipFile(moduleBundleFile(null, moduleName, version).toFile()))
@@ -779,7 +783,9 @@ class MavenCentralUploaderPluginFunctionalTest {
             """.trimIndent()
         )
 
-        gradleRunnerDebug(testProjectDir) { withArguments("zipDeploymentAllPublications") }
+        assertThat(
+            gradleRunnerDebug(testProjectDir) { withTask("zipDeploymentAllPublications") }
+        ).successfulBuild()
 
         assertThat(ZipFile(moduleBundleFile(null, moduleName, version).toFile()))
             .containsExactlyInAnyOrderFiles(

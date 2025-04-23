@@ -5,6 +5,7 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import test.utils.BuildResultAssert.Companion.assertThat
 import test.utils.PgpUtils.generatePgpKeyPair
 import test.utils.ZipFileAssert.Companion.assertThat
 import test.utils.gradleRunnerDebug
@@ -187,9 +188,9 @@ class AggregatedPublicationsFunctionalTest {
         """.trimIndent()
         )
 
-        gradleRunnerDebug(testProjectDir) { withArguments("zipDeploymentAllPublications") }.also {
-            assertThat(it.output).contains("BUILD SUCCESSFUL")
-        }
+        assertThat(
+            gradleRunnerDebug(testProjectDir) { withTask("zipDeploymentAllPublications") }
+        ).successfulBuild()
 
         val aggregateZipFile = File(testProjectDir, "build/distributions/rootModule-$version.zip").also {
             assertThat(it).exists()

@@ -5,6 +5,7 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import test.utils.BuildResultAssert.Companion.assertThat
 import test.utils.PgpUtils.generatePgpKeyPair
 import test.utils.ZipFileAssert.Companion.assertThat
 import test.utils.gradleRunnerDebug
@@ -179,9 +180,9 @@ class CombinedAggregationTest {
             """.trimIndent()
         )
 
-        gradleRunnerDebug(testProjectDir) { withArguments("zipDeploymentAllPublications") }.also {
-            assertThat(it.output).contains("BUILD SUCCESSFUL")
-        }
+        assertThat(
+            gradleRunnerDebug(testProjectDir) { withTask("zipDeploymentAllPublications") }
+        ).successfulBuild()
 
         val aggregateZipFile = File(testProjectDir, "build/distributions/rootProject-$version.zip")
         assertThat(aggregateZipFile).exists()
@@ -521,9 +522,9 @@ class CombinedAggregationTest {
             """.trimIndent()
         )
 
-        gradleRunnerDebug(testProjectDir) {
-            withArguments("zipDeploymentKotlinMultiplatformPublication")
-        }.also { assertThat(it.output).contains("BUILD SUCCESSFUL") }
+        assertThat(
+            gradleRunnerDebug(testProjectDir) { withTask("zipDeploymentKotlinMultiplatformPublication") }
+        ).successfulBuild()
 
         val aggregateZipFile = File(testProjectDir, "build/distributions/rootProject-$version.zip")
         assertThat(aggregateZipFile).exists()
@@ -566,16 +567,52 @@ class CombinedAggregationTest {
             "test/zenhelix/module1/0.1.0/module1-0.1.0-kotlin-tooling-metadata.json.sha1",
             "test/zenhelix/module1/0.1.0/module1-0.1.0-kotlin-tooling-metadata.json.md5",
             "test/zenhelix/module1/0.1.0/module1-0.1.0-kotlin-tooling-metadata.json.sha256",
-            "test/zenhelix/module1/0.1.0/module1-0.1.0-kotlin-tooling-metadata.json.sha512"
+            "test/zenhelix/module1/0.1.0/module1-0.1.0-kotlin-tooling-metadata.json.sha512",
+
+            // Module 2 - kotlinMultiplatform
+            "test/zenhelix/module2/0.1.0/module2-0.1.0.jar",
+            "test/zenhelix/module2/0.1.0/module2-0.1.0.jar.asc",
+            "test/zenhelix/module2/0.1.0/module2-0.1.0.jar.sha1",
+            "test/zenhelix/module2/0.1.0/module2-0.1.0.jar.md5",
+            "test/zenhelix/module2/0.1.0/module2-0.1.0.jar.sha256",
+            "test/zenhelix/module2/0.1.0/module2-0.1.0.jar.sha512",
+
+            "test/zenhelix/module2/0.1.0/module2-0.1.0-sources.jar",
+            "test/zenhelix/module2/0.1.0/module2-0.1.0-sources.jar.asc",
+            "test/zenhelix/module2/0.1.0/module2-0.1.0-sources.jar.sha1",
+            "test/zenhelix/module2/0.1.0/module2-0.1.0-sources.jar.md5",
+            "test/zenhelix/module2/0.1.0/module2-0.1.0-sources.jar.sha256",
+            "test/zenhelix/module2/0.1.0/module2-0.1.0-sources.jar.sha512",
+
+            "test/zenhelix/module2/0.1.0/module2-0.1.0.pom",
+            "test/zenhelix/module2/0.1.0/module2-0.1.0.pom.asc",
+            "test/zenhelix/module2/0.1.0/module2-0.1.0.pom.sha1",
+            "test/zenhelix/module2/0.1.0/module2-0.1.0.pom.md5",
+            "test/zenhelix/module2/0.1.0/module2-0.1.0.pom.sha256",
+            "test/zenhelix/module2/0.1.0/module2-0.1.0.pom.sha512",
+
+            "test/zenhelix/module2/0.1.0/module2-0.1.0.module",
+            "test/zenhelix/module2/0.1.0/module2-0.1.0.module.asc",
+            "test/zenhelix/module2/0.1.0/module2-0.1.0.module.sha1",
+            "test/zenhelix/module2/0.1.0/module2-0.1.0.module.md5",
+            "test/zenhelix/module2/0.1.0/module2-0.1.0.module.sha256",
+            "test/zenhelix/module2/0.1.0/module2-0.1.0.module.sha512",
+
+            "test/zenhelix/module2/0.1.0/module2-0.1.0-kotlin-tooling-metadata.json",
+            "test/zenhelix/module2/0.1.0/module2-0.1.0-kotlin-tooling-metadata.json.asc",
+            "test/zenhelix/module2/0.1.0/module2-0.1.0-kotlin-tooling-metadata.json.sha1",
+            "test/zenhelix/module2/0.1.0/module2-0.1.0-kotlin-tooling-metadata.json.md5",
+            "test/zenhelix/module2/0.1.0/module2-0.1.0-kotlin-tooling-metadata.json.sha256",
+            "test/zenhelix/module2/0.1.0/module2-0.1.0-kotlin-tooling-metadata.json.sha512",
         )
 
-        // Specifically verify that module2 artifacts are NOT in the ZIP
         val zipEntries = ZipFile(aggregateZipFile).entries().toList().map { it.name }
-        assertThat(zipEntries.none { it.startsWith("test/zenhelix/module2/") }).isTrue()
 
-        // Specifically verify that module1 JVM/Linux artifacts are NOT in the ZIP
         assertThat(zipEntries.none { it.startsWith("test/zenhelix/module1-jvm/") }).isTrue()
         assertThat(zipEntries.none { it.startsWith("test/zenhelix/module1-linuxx64/") }).isTrue()
+
+        assertThat(zipEntries.none { it.startsWith("test/zenhelix/module2-jvm/") }).isTrue()
+        assertThat(zipEntries.none { it.startsWith("test/zenhelix/module2-linuxx64/") }).isTrue()
     }
 
     private companion object {
