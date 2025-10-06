@@ -7,7 +7,7 @@ import io.github.zenhelix.gradle.plugin.client.model.PublishingType
 import java.nio.file.Path
 import java.util.UUID
 
-public interface MavenCentralApiClient {
+public interface MavenCentralApiClient : AutoCloseable {
 
     public fun uploadDeploymentBundle(
         credentials: Credentials, bundle: Path, publishingType: PublishingType? = null, deploymentName: String? = null

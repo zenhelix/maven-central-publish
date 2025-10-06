@@ -1,5 +1,9 @@
 package test.utils
 
+import java.io.ByteArrayOutputStream
+import java.security.KeyPairGenerator
+import java.security.Security
+import java.util.Date
 import org.bouncycastle.bcpg.ArmoredOutputStream
 import org.bouncycastle.bcpg.HashAlgorithmTags
 import org.bouncycastle.bcpg.PublicKeyPacket
@@ -11,10 +15,6 @@ import org.bouncycastle.openpgp.operator.jcajce.JcaPGPContentSignerBuilder
 import org.bouncycastle.openpgp.operator.jcajce.JcaPGPDigestCalculatorProviderBuilder
 import org.bouncycastle.openpgp.operator.jcajce.JcaPGPKeyPair
 import org.bouncycastle.openpgp.operator.jcajce.JcePBESecretKeyEncryptorBuilder
-import java.io.ByteArrayOutputStream
-import java.security.KeyPairGenerator
-import java.security.Security
-import java.util.Date
 
 internal object PgpUtils {
     fun generatePgpKeyPair(passphrase: String): String {

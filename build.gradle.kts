@@ -45,21 +45,21 @@ testing {
             if (this is JvmTestSuite) {
                 useJUnitJupiter()
                 dependencies {
-                    implementation("org.assertj:assertj-core:3.27.2")
+                    implementation("org.assertj:assertj-core:3.27.6")
                 }
             }
         }
 
         val test by getting(JvmTestSuite::class) {
-            testType.set(TestSuiteType.UNIT_TEST)
+            dependencies {
+                implementation("io.mockk:mockk:1.14.6")
+            }
         }
         val functionalTest by registering(JvmTestSuite::class) {
-            testType.set(TestSuiteType.FUNCTIONAL_TEST)
-
             dependencies {
                 implementation(project())
                 implementation(gradleTestKit())
-                implementation("org.bouncycastle:bcpg-jdk18on:1.79")
+                implementation("org.bouncycastle:bcpg-jdk18on:1.82")
             }
 
             targets {
@@ -117,14 +117,15 @@ gradlePlugin {
             implementationClass = "io.github.zenhelix.gradle.plugin.MavenCentralUploaderPlugin"
             id = "io.github.zenhelix.maven-central-publish"
             displayName = "A Gradle plugin for simplified publishing to Maven Central via Publisher API"
-            description = "A Gradle plugin that simplifies publishing artifacts to Maven Central using the Publisher API"
+            description =
+                "A Gradle plugin that simplifies publishing artifacts to Maven Central using the Publisher API"
             tags.set(listOf("publishing", "maven", "maven central", "maven central portal", "maven publish"))
         }
     }
 }
 
-dependencies{
-    compileOnly("org.jetbrains.kotlin:kotlin-gradle-plugin:2.1.0")
+dependencies {
+    compileOnly("org.jetbrains.kotlin:kotlin-gradle-plugin:2.2.20")
 }
 
 publishing {
@@ -141,8 +142,6 @@ signing {
     val signingKey: String? by project
     // ORG_GRADLE_PROJECT_signingPassword
     val signingPassword: String? by project
-
-    isRequired = false
 
     useInMemoryPgpKeys(signingKeyId, signingKey, signingPassword)
     sign(publishing.publications)

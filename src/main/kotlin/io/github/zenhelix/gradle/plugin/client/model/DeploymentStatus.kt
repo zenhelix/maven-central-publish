@@ -1,6 +1,5 @@
 package io.github.zenhelix.gradle.plugin.client.model
 
-import io.github.zenhelix.gradle.plugin.client.model.DeploymentStateType.values
 import java.util.UUID
 
 public data class DeploymentStatus(

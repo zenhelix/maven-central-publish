@@ -1,23 +1,40 @@
 package io.github.zenhelix.gradle.plugin
 
 import io.github.zenhelix.gradle.plugin.MavenCentralUploaderPlugin.Companion.MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID
-import org.assertj.core.api.Assertions.assertThat
-import org.junit.jupiter.api.BeforeEach
+import java.io.File
+import java.nio.file.Path
+import java.util.zip.ZipFile
+import org.gradle.api.publish.plugins.PublishingPlugin.PUBLISH_TASK_GROUP
+import org.gradle.internal.extensions.stdlib.capitalized
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
-import test.utils.PgpUtils.generatePgpKeyPair
+import test.buildGradleFile
+import test.createJavaMainClass
+import test.createKotlinCommonMainClass
+import test.distributionsDirectory
+import test.group
+import test.mavenCentralPortal
+import test.moduleBundleFile
+import test.moduleBundlePath
+import test.pom
+import test.settings
+import test.settingsGradleFile
+import test.signing
+import test.testkit.BuildOutputAssert
+import test.testkit.DirectoryAssert
+import test.testkit.GradleDryRunOutputAssert
+import test.testkit.GradleTasksOutputAssert
+import test.testkit.gradleDryRunRunner
+import test.testkit.gradleRunnerDebug
+import test.testkit.gradleTasksRunner
 import test.utils.ZipFileAssert.Companion.assertThat
-import test.utils.gradleRunnerDebug
-import java.io.File
-import java.util.zip.ZipFile
+import test.utils.containsMavenArtifacts
+import test.utils.containsSomeMavenArtifacts
 
 class MavenCentralUploaderPluginFunctionalTest {
 
-    @BeforeEach
-    fun setup() {
-        settingsFile = File(testProjectDir, "settings.gradle.kts")
-        rootBuildFile = File(testProjectDir, "build.gradle.kts")
-    }
+    @TempDir
+    private lateinit var testProjectDir: File
 
     @Test
     fun `zip deployment bundles for platform and catalog`() {
@@ -25,19 +42,9 @@ class MavenCentralUploaderPluginFunctionalTest {
         val tomlModuleName = "platform-toml"
         val bomModuleName = "platform-bom"
 
+        testProjectDir.settingsGradleFile().writeText(settings("test", tomlModuleName, bomModuleName))
         //language=kotlin
-        settingsFile.writeText(
-            """
-            rootProject.name = "test"
-            
-            include(
-                ":$tomlModuleName",
-                ":$bomModuleName"
-            )
-            """.trimIndent()
-        )
-        //language=kotlin
-        rootBuildFile.writeText(
+        testProjectDir.buildGradleFile().writeText(
             """
             plugins {
                 `java-platform`
@@ -45,59 +52,22 @@ class MavenCentralUploaderPluginFunctionalTest {
                 id("$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
             }
             
-            allprojects {
-                group = "test.zenhelix"
-            }
-            
-            val platformComponentName: String = "javaPlatform"
-            val catalogComponentName: String = "versionCatalog"
+            ${group(version = version)}
             
             configure(subprojects.filter { it.name.contains("-bom") || it.name.contains("-toml") }) {
                 apply {
                     plugin("$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
                 }
-            
+                
                 publishing {
                     repositories {
                         mavenLocal()
-                        mavenCentralPortal {
-                            credentials {
-                                username = "stub"
-                                password = "stub"
-                            }
-                        }
+                        ${mavenCentralPortal()}
                     }
                 }
             
-                signing {
-                    useInMemoryPgpKeys(""${'"'}${generatePgpKeyPair("stub-password")}""${'"'}, "stub-password")
-                    sign(publishing.publications)
-                }
-            
-                publishing.publications.withType<MavenPublication> {
-                    pom {
-                        description = "stub description"
-                        url = "https://stub.stub"
-                        licenses {
-                            license {
-                                name = "The Apache License, Version 2.0"
-                                url = "https://www.apache.org/licenses/LICENSE-2.0.txt"
-                            }
-                        }
-                        scm {
-                            connection = "scm:git:git://stub.stub.git"
-                            developerConnection = "scm:git:ssh://stub.stub.git"
-                            url = "https://stub.stub"
-                        }
-                        developers {
-                            developer {
-                                id = "stub"
-                                name = "Stub Stub"
-                                email = "stub@stub.stub"
-                            }
-                        }
-                    }
-                }
+                ${signing()}
+                $pom
             }
             
             configure(subprojects.filter { it.name.contains("-bom") }) {
@@ -110,7 +80,7 @@ class MavenCentralUploaderPluginFunctionalTest {
                 publishing {
                     publications {
                         create<MavenPublication>("javaPlatform") {
-                            from(components[platformComponentName])
+                            from(components["javaPlatform"])
                         }
                     }
                 }
@@ -123,7 +93,7 @@ class MavenCentralUploaderPluginFunctionalTest {
                 publishing {
                     publications {
                         create<MavenPublication>("versionCatalog") {
-                            from(components[catalogComponentName])
+                            from(components["versionCatalog"])
                         }
                     }
                 }
@@ -132,38 +102,28 @@ class MavenCentralUploaderPluginFunctionalTest {
             """.trimIndent()
         )
 
-        gradleRunnerDebug(testProjectDir) { withArguments("zipDeploymentAllPublications", "-Pversion=$version") }
+        gradleRunnerDebug(testProjectDir) {
+            withVersion(version)
+            withTask("zipDeploymentAllPublications")
+        }
 
-        assertThat(moduleBundleFile(tomlModuleName, tomlModuleName, version)).exists()
-        assertThat(moduleBundleFile(bomModuleName, bomModuleName, version)).exists()
+        DirectoryAssert.assertThat(testProjectDir.distributionsDirectory(tomlModuleName)).containsExactlyFiles(
+            Path.of("").moduleBundlePath(tomlModuleName, version, "allPublications").toString()
+        )
+        DirectoryAssert.assertThat(testProjectDir.distributionsDirectory(bomModuleName)).containsExactlyFiles(
+            Path.of("").moduleBundlePath(bomModuleName, version, "allPublications").toString()
+        )
 
-        assertThat(ZipFile(moduleBundleFile(tomlModuleName, tomlModuleName, version).toFile()))
-            .containsExactlyInAnyOrderFiles(
-                "test/zenhelix/platform-toml/0.1.0/platform-toml-0.1.0.toml",
-                "test/zenhelix/platform-toml/0.1.0/platform-toml-0.1.0.toml.asc",
-                "test/zenhelix/platform-toml/0.1.0/platform-toml-0.1.0.toml.sha1",
-                "test/zenhelix/platform-toml/0.1.0/platform-toml-0.1.0.toml.md5",
-                "test/zenhelix/platform-toml/0.1.0/platform-toml-0.1.0.toml.sha256",
-                "test/zenhelix/platform-toml/0.1.0/platform-toml-0.1.0.toml.sha512",
-
-                "test/zenhelix/platform-toml/0.1.0/platform-toml-0.1.0.module",
-                "test/zenhelix/platform-toml/0.1.0/platform-toml-0.1.0.module.asc",
-                "test/zenhelix/platform-toml/0.1.0/platform-toml-0.1.0.module.sha1",
-                "test/zenhelix/platform-toml/0.1.0/platform-toml-0.1.0.module.md5",
-                "test/zenhelix/platform-toml/0.1.0/platform-toml-0.1.0.module.sha256",
-                "test/zenhelix/platform-toml/0.1.0/platform-toml-0.1.0.module.sha512",
-
-                "test/zenhelix/platform-toml/0.1.0/platform-toml-0.1.0.pom",
-                "test/zenhelix/platform-toml/0.1.0/platform-toml-0.1.0.pom.asc",
-                "test/zenhelix/platform-toml/0.1.0/platform-toml-0.1.0.pom.sha1",
-                "test/zenhelix/platform-toml/0.1.0/platform-toml-0.1.0.pom.md5",
-                "test/zenhelix/platform-toml/0.1.0/platform-toml-0.1.0.pom.sha256",
-                "test/zenhelix/platform-toml/0.1.0/platform-toml-0.1.0.pom.sha512"
+        assertThat(
+            ZipFile(
+                testProjectDir.moduleBundleFile(tomlModuleName, tomlModuleName, version, "allPublications").toFile()
             )
-            .isEqualTextContentTo(
-                "test/zenhelix/platform-toml/0.1.0/platform-toml-0.1.0.pom",
-                //language=XML
-                """<?xml version="1.0" encoding="UTF-8"?>
+        ).containsMavenArtifacts("test.zenhelix", tomlModuleName, version) {
+            versionCatalog()
+        }.isEqualTextContentTo(
+            "test/zenhelix/platform-toml/$version/platform-toml-$version.pom",
+            //language=XML
+            """<?xml version="1.0" encoding="UTF-8"?>
 <project xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd" xmlns="http://maven.apache.org/POM/4.0.0"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <!-- This module was also published with a richer model, Gradle metadata,  -->
@@ -197,28 +157,16 @@ class MavenCentralUploaderPluginFunctionalTest {
     <url>https://stub.stub</url>
   </scm>
 </project>"""
-            )
+        )
 
-        assertThat(ZipFile(moduleBundleFile(bomModuleName, bomModuleName, version).toFile()))
-            .containsExactlyInAnyOrderFiles(
-                "test/zenhelix/platform-bom/0.1.0/platform-bom-0.1.0.module",
-                "test/zenhelix/platform-bom/0.1.0/platform-bom-0.1.0.module.asc",
-                "test/zenhelix/platform-bom/0.1.0/platform-bom-0.1.0.module.sha1",
-                "test/zenhelix/platform-bom/0.1.0/platform-bom-0.1.0.module.md5",
-                "test/zenhelix/platform-bom/0.1.0/platform-bom-0.1.0.module.sha256",
-                "test/zenhelix/platform-bom/0.1.0/platform-bom-0.1.0.module.sha512",
-
-                "test/zenhelix/platform-bom/0.1.0/platform-bom-0.1.0.pom",
-                "test/zenhelix/platform-bom/0.1.0/platform-bom-0.1.0.pom.asc",
-                "test/zenhelix/platform-bom/0.1.0/platform-bom-0.1.0.pom.sha1",
-                "test/zenhelix/platform-bom/0.1.0/platform-bom-0.1.0.pom.md5",
-                "test/zenhelix/platform-bom/0.1.0/platform-bom-0.1.0.pom.sha256",
-                "test/zenhelix/platform-bom/0.1.0/platform-bom-0.1.0.pom.sha512"
-            )
-            .isEqualTextContentTo(
-                "test/zenhelix/platform-bom/0.1.0/platform-bom-0.1.0.pom",
-                //language=XML
-                """<?xml version="1.0" encoding="UTF-8"?>
+        assertThat(
+            ZipFile(testProjectDir.moduleBundleFile(bomModuleName, bomModuleName, version, "allPublications").toFile())
+        ).containsMavenArtifacts("test.zenhelix", bomModuleName, version) {
+            gradlePlatform()
+        }.isEqualTextContentTo(
+            "test/zenhelix/$bomModuleName/$version/$bomModuleName-$version.pom",
+            //language=XML
+            """<?xml version="1.0" encoding="UTF-8"?>
 <project xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd" xmlns="http://maven.apache.org/POM/4.0.0"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <!-- This module was also published with a richer model, Gradle metadata,  -->
@@ -252,504 +200,94 @@ class MavenCentralUploaderPluginFunctionalTest {
     <url>https://stub.stub</url>
   </scm>
 </project>"""
-            )
+        )
     }
 
     @Test
     fun `kmm publishing`() {
         val moduleName = "test"
         val version = "0.1.0"
-        //language=kotlin
-        settingsFile.writeText(
-            """
-            rootProject.name = "$moduleName"
-    
-            dependencyResolutionManagement {
-                repositories {
-                    mavenCentral()
-                    google()
-                    mavenLocal()
-                }
-            }
 
-            pluginManagement {
-                repositories {
-                    gradlePluginPortal()
-                    google()
-                    mavenLocal()
-                }
-            }
-            """.trimIndent()
-        )
+        testProjectDir.settingsGradleFile().writeText(settings(moduleName))
         //language=kotlin
-        rootBuildFile.writeText(
+        testProjectDir.buildGradleFile().writeText(
             """
             import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-
+            
             plugins {
-                id("com.android.library") version "8.2.0"
                 id("org.jetbrains.kotlin.multiplatform") version "2.1.0"
-
+            
                 id("$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
             }
-
-            allprojects {
-                group = "test.zenhelix"
-            }
-
+            
+            ${group(version = version)}
+            
             publishing {
                 repositories {
                     mavenLocal()
-                    mavenCentralPortal {
-                        credentials {
-                            username = "stub"
-                            password = "stub"
-                        }
-                    }
+                    ${mavenCentralPortal()}
                 }
             }
-
-            signing {
-                useInMemoryPgpKeys(""${'"'}${generatePgpKeyPair("stub-password")}""${'"'}, "stub-password")
-                sign(publishing.publications)
-            }
-
-            publishing.publications.withType<MavenPublication> {
-                pom {
-                    description = "stub description"
-                    url = "https://stub.stub"
-                    licenses {
-                        license {
-                            name = "The Apache License, Version 2.0"
-                            url = "https://www.apache.org/licenses/LICENSE-2.0.txt"
-                        }
-                    }
-                    scm {
-                        connection = "scm:git:git://stub.stub.git"
-                        developerConnection = "scm:git:ssh://stub.stub.git"
-                        url = "https://stub.stub"
-                    }
-                    developers {
-                        developer {
-                            id = "stub"
-                            name = "Stub Stub"
-                            email = "stub@stub.stub"
-                        }
-                    }
-                }
-            }
-
+            
+            ${signing()}
+            $pom
+            
             kotlin {
                 jvm()
-                androidTarget {
-                    publishLibraryVariants("release")
-                    compilerOptions {
-                        jvmTarget.set(JvmTarget.JVM_1_8)
-                    }
-                }
                 linuxX64()
             }
-
-            android {
-                namespace = "test"
-                compileSdk = 34
-                defaultConfig {
-                    minSdk = 24
-                }
-            }
             """.trimIndent()
         )
 
-        File(testProjectDir, "src/commonMain/kotlin/test/TestFile.kt").also { it.parentFile.mkdirs() }.writeText(
-            """
-            package test
-            
-            fun generate() {}
-            """.trimIndent()
+        testProjectDir.createKotlinCommonMainClass()
+
+        gradleRunnerDebug(testProjectDir) {
+            withVersion(version)
+            withTask("zipDeploymentAllPublications")
+        }
+
+        DirectoryAssert.assertThat(testProjectDir.distributionsDirectory()).containsExactlyFiles(
+            Path.of("").moduleBundlePath(moduleName, version, "allPublications").toString()
         )
+        assertThat(
+            ZipFile(testProjectDir.moduleBundleFile(null, moduleName, version, "allPublications").toFile())
+        ).containsMavenArtifacts("test.zenhelix", moduleName, version) {
+            kotlinMultiplatform(targets = listOf("jvm", "linuxx64"))
+        }
 
-        gradleRunnerDebug(testProjectDir) { withArguments("zipDeploymentAllPublications", "-Pversion=$version") }
+        val result = gradleRunnerDebug(testProjectDir) {
+            withTask("publish")
+        }
 
-        assertThat(moduleBundleFile(null, moduleName, version, "kotlinMultiplatform")).exists()
-        assertThat(ZipFile(moduleBundleFile(null, moduleName, version, "kotlinMultiplatform").toFile()))
-            .containsExactlyInAnyOrderFiles(
-                "test/zenhelix/test/0.1.0/test-0.1.0.jar",
-                "test/zenhelix/test/0.1.0/test-0.1.0.jar.asc",
-                "test/zenhelix/test/0.1.0/test-0.1.0.jar.sha1",
-                "test/zenhelix/test/0.1.0/test-0.1.0.jar.md5",
-                "test/zenhelix/test/0.1.0/test-0.1.0.jar.sha256",
-                "test/zenhelix/test/0.1.0/test-0.1.0.jar.sha512",
-
-                "test/zenhelix/test/0.1.0/test-0.1.0-sources.jar",
-                "test/zenhelix/test/0.1.0/test-0.1.0-sources.jar.asc",
-                "test/zenhelix/test/0.1.0/test-0.1.0-sources.jar.sha1",
-                "test/zenhelix/test/0.1.0/test-0.1.0-sources.jar.md5",
-                "test/zenhelix/test/0.1.0/test-0.1.0-sources.jar.sha256",
-                "test/zenhelix/test/0.1.0/test-0.1.0-sources.jar.sha512",
-
-                "test/zenhelix/test/0.1.0/test-0.1.0.pom",
-                "test/zenhelix/test/0.1.0/test-0.1.0.pom.asc",
-                "test/zenhelix/test/0.1.0/test-0.1.0.pom.sha1",
-                "test/zenhelix/test/0.1.0/test-0.1.0.pom.md5",
-                "test/zenhelix/test/0.1.0/test-0.1.0.pom.sha256",
-                "test/zenhelix/test/0.1.0/test-0.1.0.pom.sha512",
-
-                "test/zenhelix/test/0.1.0/test-0.1.0.module",
-                "test/zenhelix/test/0.1.0/test-0.1.0.module.asc",
-                "test/zenhelix/test/0.1.0/test-0.1.0.module.sha1",
-                "test/zenhelix/test/0.1.0/test-0.1.0.module.md5",
-                "test/zenhelix/test/0.1.0/test-0.1.0.module.sha256",
-                "test/zenhelix/test/0.1.0/test-0.1.0.module.sha512",
-
-                "test/zenhelix/test/0.1.0/test-0.1.0-kotlin-tooling-metadata.json",
-                "test/zenhelix/test/0.1.0/test-0.1.0-kotlin-tooling-metadata.json.asc",
-                "test/zenhelix/test/0.1.0/test-0.1.0-kotlin-tooling-metadata.json.sha1",
-                "test/zenhelix/test/0.1.0/test-0.1.0-kotlin-tooling-metadata.json.md5",
-                "test/zenhelix/test/0.1.0/test-0.1.0-kotlin-tooling-metadata.json.sha256",
-                "test/zenhelix/test/0.1.0/test-0.1.0-kotlin-tooling-metadata.json.sha512"
-            )
-
-        assertThat(moduleBundleFile(null, moduleName, version, "jvm")).exists()
-        assertThat(ZipFile(moduleBundleFile(null, moduleName, version, "jvm").toFile()))
-            .containsExactlyInAnyOrderFiles(
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.jar",
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.jar.asc",
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.jar.sha1",
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.jar.md5",
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.jar.sha256",
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.jar.sha512",
-
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0-sources.jar",
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0-sources.jar.asc",
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0-sources.jar.sha1",
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0-sources.jar.md5",
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0-sources.jar.sha256",
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0-sources.jar.sha512",
-
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.pom",
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.pom.asc",
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.pom.sha1",
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.pom.md5",
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.pom.sha256",
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.pom.sha512",
-
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.module",
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.module.asc",
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.module.sha1",
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.module.md5",
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.module.sha256",
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.module.sha512"
-            )
-
-        assertThat(moduleBundleFile(null, moduleName, version, "linuxX64")).exists()
-        assertThat(ZipFile(moduleBundleFile(null, moduleName, version, "linuxX64").toFile()))
-            .containsExactlyInAnyOrderFiles(
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.klib",
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.klib.asc",
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.klib.sha1",
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.klib.md5",
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.klib.sha256",
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.klib.sha512",
-
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0-sources.jar",
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0-sources.jar.asc",
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0-sources.jar.sha1",
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0-sources.jar.md5",
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0-sources.jar.sha256",
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0-sources.jar.sha512",
-
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.pom",
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.pom.asc",
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.pom.sha1",
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.pom.md5",
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.pom.sha256",
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.pom.sha512",
-
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.module",
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.module.asc",
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.module.sha1",
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.module.md5",
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.module.sha256",
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.module.sha512"
-            )
-    }
-
-    @Test
-    fun `kmm publishing in aggregation publications`() {
-        val moduleName = "test"
-        val version = "0.1.0"
-        //language=kotlin
-        settingsFile.writeText(
-            """
-            rootProject.name = "$moduleName"
-    
-            dependencyResolutionManagement {
-                repositories {
-                    mavenCentral()
-                    google()
-                    mavenLocal()
-                }
-            }
-
-            pluginManagement {
-                repositories {
-                    gradlePluginPortal()
-                    google()
-                    mavenLocal()
-                }
-            }
-            """.trimIndent()
-        )
-        //language=kotlin
-        rootBuildFile.writeText(
-            """
-            import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-
-            plugins {
-                id("com.android.library") version "8.2.0"
-                id("org.jetbrains.kotlin.multiplatform") version "2.1.0"
-
-                id("$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
-            }
-
-            allprojects {
-                group = "test.zenhelix"
-            }
-
-            publishing {
-                repositories {
-                    mavenLocal()
-                    mavenCentralPortal {
-                        credentials {
-                            username = "stub"
-                            password = "stub"
-                        }
-                        uploader { aggregate { modulePublications = true } }
-                    }
-                }
-            }
-
-            signing {
-                useInMemoryPgpKeys(""${'"'}${generatePgpKeyPair("stub-password")}""${'"'}, "stub-password")
-                sign(publishing.publications)
-            }
-
-            publishing.publications.withType<MavenPublication> {
-                pom {
-                    description = "stub description"
-                    url = "https://stub.stub"
-                    licenses {
-                        license {
-                            name = "The Apache License, Version 2.0"
-                            url = "https://www.apache.org/licenses/LICENSE-2.0.txt"
-                        }
-                    }
-                    scm {
-                        connection = "scm:git:git://stub.stub.git"
-                        developerConnection = "scm:git:ssh://stub.stub.git"
-                        url = "https://stub.stub"
-                    }
-                    developers {
-                        developer {
-                            id = "stub"
-                            name = "Stub Stub"
-                            email = "stub@stub.stub"
-                        }
-                    }
-                }
-            }
-
-            kotlin {
-                jvm()
-                androidTarget {
-                    publishLibraryVariants("release")
-                    compilerOptions {
-                        jvmTarget.set(JvmTarget.JVM_1_8)
-                    }
-                }
-                linuxX64()
-            }
-
-            android {
-                namespace = "test"
-                compileSdk = 34
-                defaultConfig {
-                    minSdk = 24
-                }
-            }
-            """.trimIndent()
-        )
-
-        File(testProjectDir, "src/commonMain/kotlin/test/TestFile.kt").also { it.parentFile.mkdirs() }.writeText(
-            """
-            package test
-            
-            fun generate() {}
-            """.trimIndent()
-        )
-
-        gradleRunnerDebug(testProjectDir) { withArguments("zipDeploymentAllPublications", "-Pversion=$version") }
-
-        assertThat(moduleBundleFile(null, moduleName, version)).exists()
-        assertThat(ZipFile(moduleBundleFile(null, moduleName, version).toFile()))
-            .containsExactlyInAnyOrderFiles(
-                "test/zenhelix/test/0.1.0/test-0.1.0.jar",
-                "test/zenhelix/test/0.1.0/test-0.1.0.jar.asc",
-                "test/zenhelix/test/0.1.0/test-0.1.0.jar.sha1",
-                "test/zenhelix/test/0.1.0/test-0.1.0.jar.md5",
-                "test/zenhelix/test/0.1.0/test-0.1.0.jar.sha256",
-                "test/zenhelix/test/0.1.0/test-0.1.0.jar.sha512",
-
-                "test/zenhelix/test/0.1.0/test-0.1.0-sources.jar",
-                "test/zenhelix/test/0.1.0/test-0.1.0-sources.jar.asc",
-                "test/zenhelix/test/0.1.0/test-0.1.0-sources.jar.sha1",
-                "test/zenhelix/test/0.1.0/test-0.1.0-sources.jar.md5",
-                "test/zenhelix/test/0.1.0/test-0.1.0-sources.jar.sha256",
-                "test/zenhelix/test/0.1.0/test-0.1.0-sources.jar.sha512",
-
-                "test/zenhelix/test/0.1.0/test-0.1.0.pom",
-                "test/zenhelix/test/0.1.0/test-0.1.0.pom.asc",
-                "test/zenhelix/test/0.1.0/test-0.1.0.pom.sha1",
-                "test/zenhelix/test/0.1.0/test-0.1.0.pom.md5",
-                "test/zenhelix/test/0.1.0/test-0.1.0.pom.sha256",
-                "test/zenhelix/test/0.1.0/test-0.1.0.pom.sha512",
-
-                "test/zenhelix/test/0.1.0/test-0.1.0.module",
-                "test/zenhelix/test/0.1.0/test-0.1.0.module.asc",
-                "test/zenhelix/test/0.1.0/test-0.1.0.module.sha1",
-                "test/zenhelix/test/0.1.0/test-0.1.0.module.md5",
-                "test/zenhelix/test/0.1.0/test-0.1.0.module.sha256",
-                "test/zenhelix/test/0.1.0/test-0.1.0.module.sha512",
-
-                "test/zenhelix/test/0.1.0/test-0.1.0-kotlin-tooling-metadata.json",
-                "test/zenhelix/test/0.1.0/test-0.1.0-kotlin-tooling-metadata.json.asc",
-                "test/zenhelix/test/0.1.0/test-0.1.0-kotlin-tooling-metadata.json.sha1",
-                "test/zenhelix/test/0.1.0/test-0.1.0-kotlin-tooling-metadata.json.md5",
-                "test/zenhelix/test/0.1.0/test-0.1.0-kotlin-tooling-metadata.json.sha256",
-                "test/zenhelix/test/0.1.0/test-0.1.0-kotlin-tooling-metadata.json.sha512",
-
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.jar",
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.jar.asc",
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.jar.sha1",
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.jar.md5",
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.jar.sha256",
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.jar.sha512",
-
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0-sources.jar",
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0-sources.jar.asc",
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0-sources.jar.sha1",
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0-sources.jar.md5",
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0-sources.jar.sha256",
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0-sources.jar.sha512",
-
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.pom",
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.pom.asc",
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.pom.sha1",
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.pom.md5",
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.pom.sha256",
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.pom.sha512",
-
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.module",
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.module.asc",
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.module.sha1",
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.module.md5",
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.module.sha256",
-                "test/zenhelix/test-jvm/0.1.0/test-jvm-0.1.0.module.sha512",
-
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.klib",
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.klib.asc",
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.klib.sha1",
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.klib.md5",
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.klib.sha256",
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.klib.sha512",
-
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0-sources.jar",
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0-sources.jar.asc",
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0-sources.jar.sha1",
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0-sources.jar.md5",
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0-sources.jar.sha256",
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0-sources.jar.sha512",
-
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.pom",
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.pom.asc",
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.pom.sha1",
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.pom.md5",
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.pom.sha256",
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.pom.sha512",
-
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.module",
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.module.asc",
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.module.sha1",
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.module.md5",
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.module.sha256",
-                "test/zenhelix/test-linuxx64/0.1.0/test-linuxx64-0.1.0.module.sha512"
-            )
+        BuildOutputAssert.assertThat(result.output)
+            .containsPublishingLogCount(1)
     }
 
     @Test
     fun `java-library publishing`() {
         val moduleName = "module1"
         val version = "0.1.0"
+
+        testProjectDir.settingsGradleFile().writeText(settings(moduleName))
         //language=kotlin
-        settingsFile.writeText(
-            """
-            rootProject.name = "$moduleName"
-            """.trimIndent()
-        )
-        //language=kotlin
-        rootBuildFile.writeText(
+        testProjectDir.buildGradleFile().writeText(
             """
             plugins {
                 `java-library`
                 id("$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
             }
-
-            allprojects {
-                group = "test.zenhelix"
-                version = "$version"
-            }
-
+            
+            ${group(version = version)}
+            
             publishing {
                 repositories {
                     mavenLocal()
-                    mavenCentralPortal {
-                        credentials {
-                            username = "stub"
-                            password = "stub"
-                        }
-                    }
+                    ${mavenCentralPortal()}
                 }
             }
-
-            signing {
-                useInMemoryPgpKeys(""${'"'}${generatePgpKeyPair("stub-password")}""${'"'}, "stub-password")
-                sign(publishing.publications)
-            }
-
-            publishing.publications.withType<MavenPublication> {
-                pom {
-                    description = "stub description"
-                    url = "https://stub.stub"
-                    licenses {
-                        license {
-                            name = "The Apache License, Version 2.0"
-                            url = "https://www.apache.org/licenses/LICENSE-2.0.txt"
-                        }
-                    }
-                    scm {
-                        connection = "scm:git:git://stub.stub.git"
-                        developerConnection = "scm:git:ssh://stub.stub.git"
-                        url = "https://stub.stub"
-                    }
-                    developers {
-                        developer {
-                            id = "stub"
-                            name = "Stub Stub"
-                            email = "stub@stub.stub"
-                        }
-                    }
-                }
-            }
+            
+            ${signing()}        
+            $pom
             
             publishing {
                 publications {
@@ -758,63 +296,654 @@ class MavenCentralUploaderPluginFunctionalTest {
                     }
                 }
             }
-            
-            tasks.register("createTestClass") {
-                doLast {
-                    file("src/main/java/test/Test1.java").apply {
-                        parentFile.mkdirs()
-                        writeText(""${'"'}
-                        package test;
-                        public class Test1 {
-                            public static void test() {}
-                        }
-                        ""${'"'})
-                    }
-                }
+            """.trimIndent()
+        )
+        testProjectDir.createJavaMainClass()
+
+        gradleRunnerDebug(testProjectDir) {
+            withVersion(version)
+            withTask("zipDeploymentAllPublications")
+        }
+
+        assertThat(
+            ZipFile(testProjectDir.moduleBundleFile(null, moduleName, version, "allPublications").toFile())
+        ).containsMavenArtifacts("test.zenhelix", moduleName, version) {
+            standardJavaLibrary()
+        }
+    }
+
+    @Test
+    fun `should create aggregated zip with all modules artifacts signatures and checksums`() {
+        val version = "2.0.0"
+        val module1 = "lib-core"
+        val module2 = "lib-api"
+
+        testProjectDir.settingsGradleFile().writeText(settings("test-library", module1, module2))
+
+        testProjectDir.buildGradleFile().writeText(
+            """
+            plugins {
+                id("$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
             }
             
-            tasks.compileJava {
-                dependsOn("createTestClass")
+            ${group(version = version)}
+            
+            subprojects {
+                apply(plugin = "java-library")
+                apply(plugin = "$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
+                
+                publishing {
+                    repositories {
+                        mavenLocal()
+                        ${mavenCentralPortal()}
+                    }
+                    publications {
+                        create<MavenPublication>("mavenJava") {
+                            from(components["java"])
+                        }
+                    }
+                }
+                
+                ${signing()}
+                $pom
             }
             """.trimIndent()
         )
 
-        gradleRunnerDebug(testProjectDir) { withArguments("zipDeploymentAllPublications") }
+        testProjectDir.createJavaMainClass(module1)
+        testProjectDir.createJavaMainClass(module2)
 
-        assertThat(ZipFile(moduleBundleFile(null, moduleName, version).toFile()))
-            .containsExactlyInAnyOrderFiles(
-                "test/zenhelix/module1/0.1.0/module1-0.1.0.jar",
-                "test/zenhelix/module1/0.1.0/module1-0.1.0.jar.asc",
-                "test/zenhelix/module1/0.1.0/module1-0.1.0.jar.sha1",
-                "test/zenhelix/module1/0.1.0/module1-0.1.0.jar.md5",
-                "test/zenhelix/module1/0.1.0/module1-0.1.0.jar.sha256",
-                "test/zenhelix/module1/0.1.0/module1-0.1.0.jar.sha512",
+        GradleTasksOutputAssert
+            .assertThat(gradleTasksRunner(testProjectDir, group = PUBLISH_TASK_GROUP))
+            .containsTaskInCategory(
+                PUBLISH_TASK_GROUP,
+                "publishAllModulesToMavenCentralPortalRepository",
+                "zipDeploymentAllModules"
+            )
 
-                "test/zenhelix/module1/0.1.0/module1-0.1.0.pom",
-                "test/zenhelix/module1/0.1.0/module1-0.1.0.pom.asc",
-                "test/zenhelix/module1/0.1.0/module1-0.1.0.pom.sha1",
-                "test/zenhelix/module1/0.1.0/module1-0.1.0.pom.md5",
-                "test/zenhelix/module1/0.1.0/module1-0.1.0.pom.sha256",
-                "test/zenhelix/module1/0.1.0/module1-0.1.0.pom.sha512",
+        gradleRunnerDebug(testProjectDir) {
+            withVersion(version)
+            withTask("zipDeploymentAllModules")
+        }
 
-                "test/zenhelix/module1/0.1.0/module1-0.1.0.module",
-                "test/zenhelix/module1/0.1.0/module1-0.1.0.module.asc",
-                "test/zenhelix/module1/0.1.0/module1-0.1.0.module.sha1",
-                "test/zenhelix/module1/0.1.0/module1-0.1.0.module.md5",
-                "test/zenhelix/module1/0.1.0/module1-0.1.0.module.sha256",
-                "test/zenhelix/module1/0.1.0/module1-0.1.0.module.sha512"
+        DirectoryAssert.assertThat(testProjectDir.distributionsDirectory()).containsExactlyFiles(
+            Path.of("").moduleBundlePath("test-library", version, "allModules").toString()
+        )
+        assertThat(
+            ZipFile(testProjectDir.moduleBundleFile(null, "test-library", version, "allModules").toFile())
+        ).containsMavenArtifacts("test.zenhelix", "test-library", version) {
+            standardJavaLibrary(module1)
+            standardJavaLibrary(module2)
+        }
+    }
+
+    @Test
+    fun `individual module publishing should still work independently`() {
+        val version = "1.0.0"
+        val module1 = "module1"
+        val module2 = "module2"
+
+        testProjectDir.settingsGradleFile().writeText(settings("test-project", module1, module2))
+
+        testProjectDir.buildGradleFile().writeText(
+            """
+            plugins {
+                id("$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
+            }
+            
+            ${group(version = version)}
+            
+            subprojects {
+                apply(plugin = "java-library")
+                apply(plugin = "$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
+                
+                publishing {
+                    repositories {
+                        mavenLocal()
+                        ${mavenCentralPortal()}
+                    }
+                    publications {
+                        create<MavenPublication>("mavenJava") {
+                            from(components["java"])
+                        }
+                    }
+                }
+                
+                ${signing()}
+                $pom
+            }
+            """.trimIndent()
+        )
+
+        testProjectDir.createJavaMainClass(module1)
+        testProjectDir.createJavaMainClass(module2)
+
+        gradleRunnerDebug(testProjectDir) {
+            withVersion(version)
+            withTask(":$module1:zipDeploymentAllPublications")
+        }
+
+        DirectoryAssert.assertThat(testProjectDir.distributionsDirectory(module1)).containsExactlyFiles(
+            Path.of("").moduleBundlePath(module1, version, "allPublications").toString()
+        )
+        DirectoryAssert.assertThat(testProjectDir.distributionsDirectory(module2)).doesNotExist()
+
+        assertThat(
+            ZipFile(testProjectDir.moduleBundleFile(module1, module1, version, "allPublications").toFile())
+        ).containsMavenArtifacts("test.zenhelix", module1, version) {
+            standardJavaLibrary()
+        }
+    }
+
+    @Test
+    fun `should handle modules with multiple publications`() {
+        val version = "1.0.0"
+        val module1 = "module1"
+        val module2 = "module2"
+
+        testProjectDir.settingsGradleFile().writeText(settings("test-project", module1, module2))
+
+        testProjectDir.buildGradleFile().writeText(
+            """
+            plugins {
+                id("$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
+            }
+            
+            ${group(version = version)}
+            
+            subprojects {
+                apply(plugin = "java-library")
+                apply(plugin = "$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
+                
+                publishing {
+                    repositories {
+                        mavenLocal()
+                        ${mavenCentralPortal()}
+                    }
+                    publications {
+                        create<MavenPublication>("mainLib") {
+                            from(components["java"])
+                        }
+                        create<MavenPublication>("testFixtures") {
+                            artifactId = "${'$'}{project.name}-test-fixtures"
+                            from(components["java"])
+                        }
+                    }
+                }
+                
+                ${signing()}
+                $pom
+            }
+            """.trimIndent()
+        )
+
+        testProjectDir.createJavaMainClass(module1)
+        testProjectDir.createJavaMainClass(module2)
+
+        gradleRunnerDebug(testProjectDir) {
+            withVersion(version)
+            withTask("zipDeploymentAllModules")
+        }
+
+        DirectoryAssert.assertThat(testProjectDir.distributionsDirectory()).containsExactlyFiles(
+            Path.of("").moduleBundlePath("test-project", version, "allModules").toString()
+        )
+
+        assertThat(
+            ZipFile(testProjectDir.moduleBundleFile(null, "test-project", version, "allModules").toFile())
+        ).containsSomeMavenArtifacts("test.zenhelix", module1, version) {
+            standardJavaLibrary()
+        }.containsSomeMavenArtifacts("test.zenhelix", "$module1-test-fixtures", version) {
+            standardJavaLibrary()
+        }.containsSomeMavenArtifacts("test.zenhelix", module2, version) {
+            standardJavaLibrary()
+        }.containsSomeMavenArtifacts("test.zenhelix", "$module2-test-fixtures", version) {
+            standardJavaLibrary()
+        }
+    }
+
+    @Test
+    fun `should not create aggregation tasks when no subprojects exist`() {
+        val version = "1.0.0"
+
+        testProjectDir.settingsGradleFile().writeText(settings("single-module"))
+
+        testProjectDir.buildGradleFile().writeText(
+            """
+            plugins {
+                `java-library`
+                id("$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
+            }
+            
+            ${group(version = version)}
+            
+            publishing {
+                repositories {
+                    mavenLocal()
+                    ${mavenCentralPortal()}
+                }
+                publications {
+                    create<MavenPublication>("mavenJava") {
+                        from(components["java"])
+                    }
+                }
+            }
+            
+            ${signing()}
+            $pom
+            """.trimIndent()
+        )
+
+        testProjectDir.createJavaMainClass()
+
+        GradleTasksOutputAssert.assertThat(gradleTasksRunner(testProjectDir, group = PUBLISH_TASK_GROUP))
+            .doesNotContainTask("zipDeploymentAllModules", "publishAllModulesToMavenCentralPortalRepository")
+            .containsTask("publishAllPublicationsToMavenCentralPortalRepository")
+    }
+
+    @Test
+    fun `should create all necessary tasks for multi-module publishing`() {
+        val version = "1.5.0"
+        val module1 = "core"
+        val module2 = "api"
+        val module3 = "utils"
+
+        testProjectDir.settingsGradleFile().writeText(settings("multi-project", module1, module2, module3))
+
+        testProjectDir.buildGradleFile().writeText(
+            """
+            plugins {
+                id("$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
+            }
+            
+            ${group(version = version)}
+            
+            subprojects {
+                apply(plugin = "java-library")
+                apply(plugin = "$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
+                
+                publishing {
+                    repositories {
+                        mavenLocal()
+                        ${mavenCentralPortal()}
+                    }
+                    publications {
+                        create<MavenPublication>("mavenJava") {
+                            from(components["java"])
+                        }
+                    }
+                }
+                
+                ${signing()}
+                $pom
+            }
+            """.trimIndent()
+        )
+
+        testProjectDir.createJavaMainClass(module1)
+        testProjectDir.createJavaMainClass(module2)
+        testProjectDir.createJavaMainClass(module3)
+
+        GradleTasksOutputAssert.assertThat(gradleTasksRunner(testProjectDir, group = PUBLISH_TASK_GROUP))
+            .containsTaskInCategory(
+                PUBLISH_TASK_GROUP,
+                "publishAllModulesToMavenCentralPortalRepository",
+                "zipDeploymentAllModules"
+            )
+            .containsTaskInCategory(
+                PUBLISH_TASK_GROUP,
+                "$module1:publishAllPublicationsToMavenCentralPortalRepository",
+                "$module1:zipDeploymentAllPublications",
+                "$module1:zipDeploymentMavenJavaPublication",
+
+                "$module2:publishAllPublicationsToMavenCentralPortalRepository",
+                "$module2:zipDeploymentAllPublications",
+                "$module2:zipDeploymentMavenJavaPublication",
+
+                "$module3:publishAllPublicationsToMavenCentralPortalRepository",
+                "$module3:zipDeploymentAllPublications",
+                "$module3:zipDeploymentMavenJavaPublication"
             )
     }
 
-    private fun moduleBundleFile(gradleModuleName: String?, moduleName: String, version: String, publicationName: String? = null) =
-        testProjectDir.toPath().let { path -> gradleModuleName?.let { path.resolve(it) } ?: path }.resolve("build").resolve("distributions")
-            .resolve("$moduleName-${publicationName?.let { "$it-" } ?: ""}$version.zip")
+    @Test
+    fun `publishAllModulesToMavenCentralPortalRepository should create only aggregated archive`() {
+        val version = "3.0.0"
+        val module1 = "lib-a"
+        val module2 = "lib-b"
 
-    private companion object {
-        @TempDir
-        private lateinit var testProjectDir: File
+        testProjectDir.settingsGradleFile().writeText(settings("my-library", module1, module2))
 
-        private lateinit var settingsFile: File
-        private lateinit var rootBuildFile: File
+        testProjectDir.buildGradleFile().writeText(
+            """
+            plugins {
+                id("$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
+            }
+            
+            ${group(version = version)}
+            
+            subprojects {
+                apply(plugin = "java-library")
+                apply(plugin = "$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
+                
+                publishing {
+                    repositories {
+                        mavenLocal()
+                        ${mavenCentralPortal()}
+                    }
+                    publications {
+                        create<MavenPublication>("mavenJava") {
+                            from(components["java"])
+                        }
+                    }
+                }
+                
+                ${signing()}
+                $pom
+            }
+            """.trimIndent()
+        )
+
+        testProjectDir.createJavaMainClass(module1)
+        testProjectDir.createJavaMainClass(module2)
+
+        GradleDryRunOutputAssert
+            .assertThat(gradleDryRunRunner(testProjectDir, "publishAllModulesToMavenCentralPortalRepository"))
+            .containsExactlyRootTasksInOrder(
+                "zipDeploymentAllModules",
+                "publishAllModulesToMavenCentralPortalRepository"
+            )
+            .doesNotContainTask(":$module1:publishAllPublicationsToMavenCentralPortalRepository")
+            .doesNotContainTask(":$module2:publishAllPublicationsToMavenCentralPortalRepository")
+
+        gradleRunnerDebug(testProjectDir) {
+            withVersion(version)
+            withTask("zipDeploymentAllModules")
+        }
+
+        DirectoryAssert.assertThat(testProjectDir.distributionsDirectory()).containsExactlyFiles(
+            Path.of("").moduleBundlePath("my-library", version, "allModules").toString()
+        )
+        DirectoryAssert.assertThat(testProjectDir.distributionsDirectory(module1)).doesNotExist()
+        DirectoryAssert.assertThat(testProjectDir.distributionsDirectory(module2)).doesNotExist()
     }
+
+    @Test
+    fun `should create per-publication zip archives without aggregation`() {
+        val rootModuleName = "test"
+        val appModuleName = "app"
+        val version = "1.0.0"
+
+        val publicationName = "libJava"
+
+        testProjectDir.settingsGradleFile().writeText(settings(rootModuleName, appModuleName))
+        testProjectDir.buildGradleFile().writeText(
+            """
+            ${group(version = version)}            
+            """.trimIndent()
+        )
+        testProjectDir.buildGradleFile(appModuleName).writeText(
+            """
+            plugins {
+                java
+                application
+                id("$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
+            }
+            
+            application {
+                mainClass = "test.Test"
+            }
+
+            java {
+                withSourcesJar()
+            }
+
+            publishing {
+                repositories {
+                    mavenLocal()
+                    ${mavenCentralPortal()}
+                }
+
+                publications {
+                    create<MavenPublication>("$publicationName") {
+                        from(components["java"])
+                    }
+                }
+            }
+            
+            ${signing()}
+            $pom
+            """.trimIndent()
+        )
+        testProjectDir.createJavaMainClass(appModuleName)
+
+        GradleTasksOutputAssert.assertThat(gradleTasksRunner(testProjectDir, group = PUBLISH_TASK_GROUP))
+            .containsExactlyTaskInCategoryInAnyOrder(
+                PUBLISH_TASK_GROUP,
+                "app:generateMetadataFileFor${publicationName.capitalized()}Publication",
+                "app:generatePomFileFor${publicationName.capitalized()}Publication",
+
+                "app:publish${publicationName.capitalized()}PublicationToMavenLocalRepository",
+                "app:publish${publicationName.capitalized()}PublicationToMavenLocal",
+                "app:publishAllPublicationsToMavenLocalRepository",
+                "app:publishToMavenLocal",
+                "app:publish",
+
+                "app:checksum${publicationName.capitalized()}Publication",
+                "app:checksumAllPublications",
+                "app:zipDeployment${publicationName.capitalized()}Publication",
+                "app:zipDeploymentAllPublications",
+                "app:publish${publicationName.capitalized()}PublicationToMavenCentralPortalRepository",
+                "app:publishAllPublicationsToMavenCentralPortalRepository"
+            )
+
+        val result = gradleRunnerDebug(testProjectDir) {
+            withTask("publish${publicationName.capitalized()}PublicationToMavenCentralPortalRepository")
+        }
+
+        BuildOutputAssert.assertThat(result.output)
+            .containsPublishingLog("$appModuleName-$publicationName-$version.zip", "AUTOMATIC", null)
+            .containsPublishingLogCount(1)
+
+        assertThat(
+            ZipFile(testProjectDir.moduleBundleFile(appModuleName, appModuleName, version, publicationName).toFile())
+        ).containsMavenArtifacts("test.zenhelix", appModuleName, version) {
+            standardJavaLibrary(withSources = true)
+        }
+    }
+
+    @Test
+    fun `should create aggregated zip with all publications when aggregatePublications is true`() {
+        val rootModuleName = "test"
+        val appModuleName = "app"
+        val version = "1.0.0"
+
+        val publicationName = "libJava"
+        val secondPublicationName = "libJavaSecond"
+
+        testProjectDir.settingsGradleFile().writeText(settings(rootModuleName, appModuleName))
+        testProjectDir.buildGradleFile().writeText(
+            """
+            ${group(version = version)}            
+            """.trimIndent()
+        )
+        testProjectDir.buildGradleFile(appModuleName).writeText(
+            """
+            plugins {
+                java
+                application
+                id("$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
+            }
+            
+            application {
+                mainClass = "test.Test"
+            }
+
+            java {
+                withSourcesJar()
+            }
+
+            publishing {
+                repositories {
+                    mavenLocal()
+                    ${mavenCentralPortal()}
+                }
+
+                publications {
+                    create<MavenPublication>("$publicationName") {
+                        from(components["java"])
+                    }
+                    create<MavenPublication>("$secondPublicationName") {
+                        from(components["java"])
+                    }
+                }
+            }
+            
+            ${signing()}
+            $pom
+            """.trimIndent()
+        )
+        testProjectDir.createJavaMainClass(appModuleName)
+
+        GradleTasksOutputAssert.assertThat(gradleTasksRunner(testProjectDir, group = PUBLISH_TASK_GROUP))
+            .containsExactlyTaskInCategoryInAnyOrder(
+                PUBLISH_TASK_GROUP,
+                "app:generateMetadataFileFor${publicationName.capitalized()}Publication",
+                "app:generateMetadataFileFor${secondPublicationName.capitalized()}Publication",
+                "app:generatePomFileFor${publicationName.capitalized()}Publication",
+                "app:generatePomFileFor${secondPublicationName.capitalized()}Publication",
+
+                "app:publish${publicationName.capitalized()}PublicationToMavenLocalRepository",
+                "app:publish${secondPublicationName.capitalized()}PublicationToMavenLocalRepository",
+                "app:publish${publicationName.capitalized()}PublicationToMavenLocal",
+                "app:publish${secondPublicationName.capitalized()}PublicationToMavenLocal",
+                "app:publishAllPublicationsToMavenLocalRepository",
+                "app:publishToMavenLocal",
+                "app:publish",
+
+                "app:checksum${publicationName.capitalized()}Publication",
+                "app:checksum${secondPublicationName.capitalized()}Publication",
+                "app:checksumAllPublications",
+                "app:zipDeployment${publicationName.capitalized()}Publication",
+                "app:zipDeployment${secondPublicationName.capitalized()}Publication",
+                "app:zipDeploymentAllPublications",
+                "app:publish${publicationName.capitalized()}PublicationToMavenCentralPortalRepository",
+                "app:publish${secondPublicationName.capitalized()}PublicationToMavenCentralPortalRepository",
+                "app:publishAllPublicationsToMavenCentralPortalRepository"
+            )
+
+        val result = gradleRunnerDebug(testProjectDir) {
+            withTask("publishAllPublicationsToMavenCentralPortalRepository")
+        }
+
+        BuildOutputAssert.assertThat(result.output)
+            .containsPublishingLog("$appModuleName-allPublications-$version.zip", "AUTOMATIC", null)
+            .containsPublishingLogCount(1)
+
+        assertThat(
+            ZipFile(testProjectDir.moduleBundleFile(appModuleName, appModuleName, version, "allPublications").toFile())
+        ).containsMavenArtifacts("test.zenhelix", appModuleName, version) {
+            standardJavaLibrary(withSources = true)
+        }
+    }
+
+    @Test
+    fun `root project with publications and subprojects should publish only aggregated archive`() {
+        val version = "2.5.0"
+        val module1 = "module-a"
+        val module2 = "module-b"
+
+        testProjectDir.settingsGradleFile().writeText(settings("bom-library", module1, module2))
+
+        // Root project has BOM publication AND subprojects
+        testProjectDir.buildGradleFile().writeText(
+            """
+            plugins {
+                `java-platform`
+                id("$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
+            }
+            
+            ${group(version = version)}
+            
+            javaPlatform {
+                allowDependencies()
+            }
+            
+            publishing {
+                repositories {
+                    mavenLocal()
+                    ${mavenCentralPortal()}
+                }
+                publications {
+                    create<MavenPublication>("bomPublication") {
+                        from(components["javaPlatform"])
+                    }
+                }
+            }
+            
+            ${signing()}
+            $pom
+            
+            subprojects {
+                apply(plugin = "java-library")
+                apply(plugin = "$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
+                
+                publishing {
+                    repositories {
+                        mavenLocal()
+                        ${mavenCentralPortal()}
+                    }
+                    publications {
+                        create<MavenPublication>("mavenJava") {
+                            from(components["java"])
+                        }
+                    }
+                }
+                
+                ${signing()}
+                $pom
+            }
+            """.trimIndent()
+        )
+
+        testProjectDir.createJavaMainClass(module1)
+        testProjectDir.createJavaMainClass(module2)
+
+        GradleDryRunOutputAssert
+            .assertThat(gradleDryRunRunner(testProjectDir, "publish"))
+            .containsExactlyRootTasksInOrder(
+                "generateMetadataFileForBomPublicationPublication",
+                "generatePomFileForBomPublicationPublication",
+                "signBomPublicationPublication",
+                "checksumBomPublicationPublication",
+                "zipDeploymentAllModules",
+                "publishAllModulesToMavenCentralPortalRepository",
+                "publishBomPublicationPublicationToMavenLocalRepository",
+                "publish"
+            )
+
+        val result = gradleRunnerDebug(testProjectDir) {
+            withVersion(version)
+            withTask("publish")
+        }
+
+        BuildOutputAssert.assertThat(result.output)
+            .containsPublishingLogCount(1)
+            .containsPublishingLog("bom-library-allModules-$version.zip", "AUTOMATIC", null)
+
+        DirectoryAssert.assertThat(testProjectDir.distributionsDirectory()).containsExactlyFiles(
+            Path.of("").moduleBundlePath("bom-library", version, "allModules").toString()
+        )
+
+        assertThat(
+            ZipFile(testProjectDir.moduleBundleFile(null, "bom-library", version, "allModules").toFile())
+        ).containsSomeMavenArtifacts("test.zenhelix", "bom-library", version) {
+            gradlePlatform()
+        }.containsSomeMavenArtifacts("test.zenhelix", module1, version) {
+            standardJavaLibrary()
+        }.containsSomeMavenArtifacts("test.zenhelix", module2, version) {
+            standardJavaLibrary()
+        }
+    }
+
 }
