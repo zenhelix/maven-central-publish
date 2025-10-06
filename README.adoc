@@ -3,46 +3,133 @@
 
 = Maven Central Portal Publisher
 
-📦 Gradle plugin for effortless publishing to Maven Central using the Publisher API.
+Gradle plugin for publishing to Maven Central via https://central.sonatype.org/publish/publish-portal-api/[Publisher API].
 
-== Installation 🛠️
+== Installation
 
-[source,kotlin,subs="+attributes"]
+[source,kotlin]
 ----
 plugins {
     id("io.github.zenhelix.maven-central-publish") version "{versionPlaceholder}"
 }
 ----
 
-== Usage 🚀
+== Overview
 
-The plugin includes the standard `maven-publish` plugin for publishing and the `signing` plugin for signing artifacts.
-For detailed instructions on these, refer to the official documentation:
+Plugin applies `maven-publish` and `signing` plugins automatically, then extends publishing workflow with Maven Central Portal integration:
 
-- https://docs.gradle.org/current/userguide/publishing_maven.html[Maven Publish Plugin Documentation]
-- https://docs.gradle.org/current/userguide/signing_plugin.html[Signing Plugin Documentation]
+* Creates checksum files (MD5, SHA1, SHA256, SHA512) for all artifacts
+* Packages artifacts, signatures, and checksums into deployment bundles (ZIP)
+* Uploads bundles via Publisher API
+* Polls deployment status until completion
 
-To connect to Maven Central and use their Publisher API, you can read more here:
+Supports both single-module and multi-module projects with automatic aggregation.
 
-- https://central.sonatype.org/publish/publish-guide/[Maven Central Publisher API Guide]
+== Configuration
 
-.Basic Plugin Setup Example
-[source,kotlin,subs="+attributes"]
+[source,kotlin]
 ----
-publishing {
-    repositories {
-        mavenCentralPortal {
-            credentials {
-                username = sonatypeUser
-                password = sonatypePassword
-            }
-        }
+mavenCentralPortal {
+    credentials {
+        username = providers.gradleProperty("mavenCentralUsername")
+        password = providers.gradleProperty("mavenCentralPassword")
+    }
+    publishingType = PublishingType.AUTOMATIC
+    deploymentName = "my-deployment"
+
+    uploader {
+        maxStatusChecks = 20
+        statusCheckDelay = Duration.ofSeconds(10)
     }
 }
 ----
 
-.Full Configuration Example
-[source,kotlin,subs="+attributes"]
+[cols="1,3"]
+|===
+|Property |Description
+
+|`credentials.username`
+|Maven Central username or token username
+
+|`credentials.password`
+|Maven Central password or token password
+
+|`publishingType`
+|`AUTOMATIC` - auto-publish after validation +
+`USER_MANAGED` - manual publish via Portal UI +
+Default: `AUTOMATIC`
+
+|`deploymentName`
+|Optional deployment identifier in Portal +
+Default: `null` (auto-generated)
+
+|`uploader.maxStatusChecks`
+|Max status polling attempts +
+Default: `20`
+
+|`uploader.statusCheckDelay`
+|Delay between status checks +
+Default: `10 seconds`
+|===
+
+Generate tokens at https://central.sonatype.org/publish/generate-portal-token/[generate-portal-token]
+
+== Tasks
+
+Plugin registers tasks per publication and aggregation tasks:
+
+=== Per-Publication Tasks
+
+* `checksum<Publication>Publication` - Generate checksums
+* `zipDeployment<Publication>Publication` - Create ZIP bundle
+* `publish<Publication>PublicationToMavenCentralPortalRepository` - Upload bundle
+
+=== Aggregation Tasks
+
+* `checksumAllPublications` - Generate checksums for all publications
+* `zipDeploymentAllPublications` - Bundle all publications
+* `publishAllPublicationsToMavenCentralPortalRepository` - Upload all publications
+
+=== Multi-Module Tasks
+
+For root project with subprojects:
+
+* `zipDeploymentAllModules` - Bundle all modules
+* `publishAllModulesToMavenCentralPortalRepository` - Upload all modules
+
+== Lifecycle Task Behavior
+
+Plugin integrates with Gradle's `publish` lifecycle task:
+
+=== Single-Module Projects
+
+When root project has publications and no subprojects with publications:
+
+[source,bash]
+----
+./gradlew publish
+----
+
+Executes: `publishAllPublicationsToMavenCentralPortalRepository`
+
+=== Multi-Module Projects
+
+When subprojects have publications:
+
+[source,bash]
+----
+./gradlew publish
+----
+
+Executes: `publishAllModulesToMavenCentralPortalRepository`
+
+Aggregates all publications from root and subprojects into single deployment bundle.
+
+== Usage
+
+=== Single Module
+
+[source,kotlin]
 ----
 publishing {
     repositories {
@@ -55,29 +142,33 @@ publishing {
     }
 
     publications {
-        create<MavenPublication>("someJavaLibrary") {
+        create<MavenPublication>("mavenJava") {
             from(components["java"])
 
             pom {
-                description = "A description"
-                url = "https://example.com"
+                name = "My Library"
+                description = "Library description"
+                url = "https://github.com/user/repo"
+
                 licenses {
                     license {
-                        name = "The Apache License, Version 2.0"
+                        name = "Apache License 2.0"
                         url = "https://www.apache.org/licenses/LICENSE-2.0.txt"
                     }
                 }
-                scm {
-                    connection = "scm:git:git://example.com/your-repo.git"
-                    developerConnection = "scm:git:ssh://example.com/your-repo.git"
-                    url = "https://example.com/your-repo"
-                }
+
                 developers {
                     developer {
-                        id = "your-id"
-                        name = "Your Name"
-                        email = "your.email@example.com"
+                        id = "userid"
+                        name = "User Name"
+                        email = "user@example.com"
                     }
+                }
+
+                scm {
+                    connection = "scm:git:git://github.com/user/repo.git"
+                    developerConnection = "scm:git:ssh://github.com/user/repo.git"
+                    url = "https://github.com/user/repo"
                 }
             }
         }
@@ -85,49 +176,37 @@ publishing {
 }
 
 signing {
-    useInMemoryPgpKeys(signingKeyId, signingKey, signingPassword)
+    val signingKey: String? by project
+    val signingPassword: String? by project
+    useInMemoryPgpKeys(signingKey, signingPassword)
     sign(publishing.publications)
 }
 ----
 
-== Configuration ⚙️
-
-.Plugin Configuration
-[source,kotlin,subs="+attributes"]
+[source,bash]
 ----
-mavenCentralPortal {
-    credentials {
-        username = sonatypeUser
-        password = sonatypePassword
-    }
-    publishingType = PublishingType.USER_MANAGED
-    baseUrl = "https://central.sonatype.com"
-    deploymentName = "some-name"
-}
+./gradlew publishAllPublicationsToMavenCentralPortalRepository
 ----
 
-Where:
+=== Multi-Module
 
-- `credentials.username` and `credentials.password`:
-These are your Maven Central credentials.
-* `username`: Your Sonatype account username or token username.
-* `password`: Your Sonatype account password or token password.
- +
-To generate a token, follow the https://central.sonatype.org/publish/generate-portal-token/[Maven Central Token Generation Guide].
-- `publishingType` defines the publishing mode:
-* `PublishingType.USER_MANAGED`: Uploads artifacts but requires manual publishing on the portal.
-* `PublishingType.AUTOMATIC`: Uploads and publishes artifacts automatically.
- +
-**Default value:** `PublishingType.AUTOMATIC`
-- `baseUrl` is the URL of the Maven Central portal.
- +
-**Default value:** `"https://central.sonatype.com"`
-- `deploymentName` is the name of the deployment bundle.
- +
-**Default value:** `null` +
-For more details, refer to https://central.sonatype.org/publish/publish-portal-api/#uploading-a-deployment-bundle[Maven Central Deployment Documentation]
+Apply plugin to root and subprojects.
+Root task aggregates all modules:
 
-== License 📜
+[source,bash]
+----
+./gradlew publishAllModulesToMavenCentralPortalRepository
+----
+
+== Requirements
+
+* Gradle 8.0+
+* Java 17+
+* Valid Maven Central account
+* POM metadata: name, description, url, licenses, developers, scm
+* Signed artifacts
+
+== License
 
 Licensed under the **Apache License, Version 2.0**.
 For more details, see the link:LICENSE[LICENSE file] in the root of this repository.
