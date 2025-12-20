@@ -43,6 +43,8 @@ class MavenCentralUploaderPluginFunctionalTest {
         val bomModuleName = "platform-bom"
 
         testProjectDir.settingsGradleFile().writeText(settings("test", tomlModuleName, bomModuleName))
+        File(testProjectDir, tomlModuleName).mkdirs()
+        File(testProjectDir, bomModuleName).mkdirs()
         //language=kotlin
         testProjectDir.buildGradleFile().writeText(
             """

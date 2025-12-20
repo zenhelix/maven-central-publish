@@ -76,7 +76,7 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
         publicationInfos.forEach { (publication, publicationInfo) ->
             val zipTask = project.registerZipPublicationTask(publication.name) {
                 dependsOn(allTaskDependencies.getValue(publication.name))
-                dependsOn(publicationInfo.checksumTask)
+                publicationInfo.checksumTask?.also { dependsOn(it) }
 
                 this.publications.add(publicationInfo)
 
@@ -124,12 +124,14 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
             createAggregationTasks(rootProject, extension)
 
             rootProject.findPublishLifecycleTask().configure {
-                dependsOn(rootProject.tasks.findByName("publishAllModulesToMavenCentralPortalRepository"))
+                rootProject.tasks.findByName("publishAllModulesToMavenCentralPortalRepository")?.also { dependsOn(it) }
             }
         } else {
             // Single-module project: publish root project publications only
             rootProject.findPublishLifecycleTask().configure {
-                dependsOn(rootProject.tasks.findByName("publishAllPublicationsToMavenCentralPortalRepository"))
+                rootProject.tasks.findByName("publishAllPublicationsToMavenCentralPortalRepository")?.also {
+                    dependsOn(it)
+                }
             }
         }
     }

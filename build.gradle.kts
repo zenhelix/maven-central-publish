@@ -52,14 +52,14 @@ testing {
 
         val test by getting(JvmTestSuite::class) {
             dependencies {
-                implementation("io.mockk:mockk:1.14.6")
+                implementation("io.mockk:mockk:1.14.7")
             }
         }
         val functionalTest by registering(JvmTestSuite::class) {
             dependencies {
                 implementation(project())
                 implementation(gradleTestKit())
-                implementation("org.bouncycastle:bcpg-jdk18on:1.82")
+                implementation("org.bouncycastle:bcpg-jdk18on:1.83")
             }
 
             targets {
@@ -125,7 +125,7 @@ gradlePlugin {
 }
 
 dependencies {
-    compileOnly("org.jetbrains.kotlin:kotlin-gradle-plugin:2.2.20")
+    compileOnly("org.jetbrains.kotlin:kotlin-gradle-plugin:2.3.0")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.20.1")
 }
 
