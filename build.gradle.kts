@@ -126,6 +126,7 @@ gradlePlugin {
 
 dependencies {
     compileOnly("org.jetbrains.kotlin:kotlin-gradle-plugin:2.2.20")
+    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.20.1")
 }
 
 publishing {

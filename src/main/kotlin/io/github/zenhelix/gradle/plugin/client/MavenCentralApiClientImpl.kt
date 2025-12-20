@@ -1,5 +1,10 @@
 package io.github.zenhelix.gradle.plugin.client
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties
+import com.fasterxml.jackson.annotation.JsonProperty
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.fasterxml.jackson.module.kotlin.readValue
 import io.github.zenhelix.gradle.plugin.client.model.Credentials
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentStateType
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentStatus
@@ -23,9 +28,6 @@ import java.time.Duration
 import java.util.UUID
 import org.gradle.api.logging.Logger
 import org.gradle.api.logging.Logging
-import org.jetbrains.kotlin.com.google.gson.Gson
-import org.jetbrains.kotlin.com.google.gson.JsonSyntaxException
-import org.jetbrains.kotlin.com.google.gson.annotations.SerializedName
 
 public class MavenCentralApiClientImpl(
     private val baseUrl: String,
@@ -37,7 +39,7 @@ public class MavenCentralApiClientImpl(
 ) : MavenCentralApiClient {
 
     private val logger: Logger = Logging.getLogger(MavenCentralApiClientImpl::class.java)
-    private val gson: Gson = Gson()
+    private val objectMapper: ObjectMapper = jacksonObjectMapper()
     private val retryHandler: RetryHandler = RetryHandler(maxRetries, retryDelay, logger)
 
     private val httpClient: HttpClient = httpClient ?: HttpClient.newBuilder()
@@ -262,8 +264,8 @@ public class MavenCentralApiClientImpl(
     private class RetriableHttpException(statusCode: Int, message: String) : Exception("HTTP $statusCode: $message")
 
     private fun parseDeploymentStatus(json: String): DeploymentStatus? = try {
-        gson.fromJson(json, DeploymentStatusDto::class.java).toModel()
-    } catch (e: JsonSyntaxException) {
+        objectMapper.readValue<DeploymentStatusDto>(json).toModel()
+    } catch (e: Exception) {
         logger.error("Failed to parse deployment status: {}", json, e)
         null
     }
@@ -282,12 +284,18 @@ public class MavenCentralApiClientImpl(
 
     private fun urlEncode(value: String): String = URLEncoder.encode(value, UTF_8)
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     private data class DeploymentStatusDto(
-        @SerializedName("deploymentId") val deploymentId: String,
-        @SerializedName("deploymentName") val deploymentName: String,
-        @SerializedName("deploymentState") val deploymentState: String,
-        @SerializedName("purls") val purls: List<String>?,
-        @SerializedName("errors") val errors: Map<String, Any?>?
+        @param:JsonProperty("deploymentId")
+        val deploymentId: String,
+        @param:JsonProperty("deploymentName")
+        val deploymentName: String,
+        @param:JsonProperty("deploymentState")
+        val deploymentState: String,
+        @param:JsonProperty("purls")
+        val purls: List<String>?,
+        @param:JsonProperty("errors")
+        val errors: Map<String, Any?>?
     ) {
         fun toModel() = DeploymentStatus(
             deploymentId = UUID.fromString(deploymentId),
