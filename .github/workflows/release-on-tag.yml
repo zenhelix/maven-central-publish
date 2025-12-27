@@ -20,24 +20,22 @@ jobs:
       with:
         fetch-depth: '0'
     - id: 'step-1'
-      name: 'Get Tag'
-      uses: 'dawidd6/action-get-tag@v1'
-    - id: 'step-2'
       name: 'Create Release'
       uses: 'softprops/action-gh-release@v2'
       with:
-        name: '${{ steps.step-1.outputs.tag }}'
-        tag_name: '${{ steps.step-1.outputs.tag }}'
+        name: '${{ github.ref_name }}'
+        tag_name: '${{ github.ref_name }}'
         draft: 'false'
+        generate_release_notes: 'true'
       env:
         GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
-    - id: 'step-3'
+    - id: 'step-2'
       name: 'Set up Java'
       uses: 'actions/setup-java@v5'
       with:
         java-version: '17'
         distribution: 'temurin'
-    - id: 'step-4'
+    - id: 'step-3'
       name: 'Publish'
       env:
         GRADLE_PUBLISH_KEY: '${{ secrets.GRADLE_PUBLISH_KEY }}'
@@ -46,4 +44,4 @@ jobs:
         ORG_GRADLE_PROJECT_signingPublicKey: '${{ secrets.MAVEN_SONATYPE_SIGNING_PUB_KEY_ASCII_ARMORED }}'
         ORG_GRADLE_PROJECT_signingKey: '${{ secrets.MAVEN_SONATYPE_SIGNING_KEY_ASCII_ARMORED }}'
         ORG_GRADLE_PROJECT_signingPassword: '${{ secrets.MAVEN_SONATYPE_SIGNING_PASSWORD }}'
-      run: './gradlew publishPlugins -Pversion=''${{ steps.step-1.outputs.tag }}'''
+      run: './gradlew publishPlugins -Pversion=''${{ github.ref_name }}'''

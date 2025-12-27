@@ -7,11 +7,7 @@ on:
   push:
     branches:
     - 'main'
-  pull_request:
-    types:
-    - 'closed'
-    branches:
-    - 'main'
+    - '[0-9]+.x'
 permissions:
   contents: 'write'
 jobs:
@@ -23,7 +19,6 @@ jobs:
       name: 'Check out'
       uses: 'actions/checkout@v6'
       with:
-        ref: '${{ github.event.pull_request.merge_commit_sha }}'
         fetch-depth: '0'
     - id: 'step-1'
       name: 'Set up Java'
@@ -48,4 +43,7 @@ jobs:
       uses: 'anothrNick/github-tag-action@v1'
       env:
         GITHUB_TOKEN: '${{ steps.step-4.outputs.token }}'
-        WITH_V: 'false'
+        TAG_PREFIX: ''
+        DEFAULT_BUMP: 'patch'
+        RELEASE_BRANCHES: 'main,.*\.x'
+        TAG_CONTEXT: 'branch'

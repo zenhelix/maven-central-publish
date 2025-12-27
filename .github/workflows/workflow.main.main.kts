@@ -26,8 +26,6 @@ import io.github.typesafegithub.workflows.actions.petermurray.WorkflowApplicatio
 import io.github.typesafegithub.workflows.domain.Mode.Write
 import io.github.typesafegithub.workflows.domain.Permission.Contents
 import io.github.typesafegithub.workflows.domain.RunnerType.UbuntuLatest
-import io.github.typesafegithub.workflows.domain.triggers.PullRequest
-import io.github.typesafegithub.workflows.domain.triggers.PullRequest.Type.Closed
 import io.github.typesafegithub.workflows.domain.triggers.Push
 import io.github.typesafegithub.workflows.dsl.expressions.contexts.SecretsContext
 import io.github.typesafegithub.workflows.dsl.expressions.expr
@@ -52,8 +50,7 @@ object Branches {
 workflow(
     name = "Create Tag",
     on = listOf(
-        Push(branches = listOf(MAIN_BRANCH_NAME)),
-        PullRequest(types = listOf(Closed), branches = listOf(MAIN_BRANCH_NAME))
+        Push(branches = listOf(MAIN_BRANCH_NAME, "[0-9]+.x"))
     ),
     permissions = mapOf(Contents to Write),
     sourceFile = __FILE__,
@@ -63,10 +60,7 @@ workflow(
     job(id = "create_release_tag", name = "Create Release Tag", runsOn = UbuntuLatest) {
         uses(
             name = "Check out",
-            action = Checkout(
-                fetchDepth = FetchDepth.Value(0),
-                ref = expr { github.eventPullRequest.pull_request.merge_commit_sha }
-            )
+            action = Checkout(fetchDepth = FetchDepth.Value(0))
         )
         uses(name = "Set up Java", action = SetupJava(javaVersion = "17", distribution = Temurin))
         uses(name = "Gradle Wrapper Validation", action = ActionsWrapperValidation())
@@ -83,7 +77,10 @@ workflow(
             action = GithubTagAction(),
             env = mapOf(
                 GITHUB_TOKEN_ENV to expr { token },
-                "WITH_V" to false.toString()
+                "TAG_PREFIX" to "",
+                "DEFAULT_BUMP" to "patch",
+                "RELEASE_BRANCHES" to "main,.*\\.x",
+                "TAG_CONTEXT" to "branch"
             )
         )
     }

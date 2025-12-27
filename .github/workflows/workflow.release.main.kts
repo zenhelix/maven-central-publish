@@ -9,7 +9,6 @@
 @file:DependsOn("actions:checkout:v6")
 @file:DependsOn("actions:setup-java:v5")
 @file:DependsOn("softprops:action-gh-release:v2")
-@file:DependsOn("dawidd6:action-get-tag:v1")
 
 import Environment.GITHUB_TOKEN_ENV
 import Environment.GRADLE_PUBLISH_KEY_ENV
@@ -28,13 +27,11 @@ import io.github.typesafegithub.workflows.actions.actions.Checkout
 import io.github.typesafegithub.workflows.actions.actions.Checkout.FetchDepth
 import io.github.typesafegithub.workflows.actions.actions.SetupJava
 import io.github.typesafegithub.workflows.actions.actions.SetupJava.Distribution.Temurin
-import io.github.typesafegithub.workflows.actions.dawidd6.ActionGetTag_Untyped
 import io.github.typesafegithub.workflows.actions.softprops.ActionGhRelease
 import io.github.typesafegithub.workflows.domain.Mode.Write
 import io.github.typesafegithub.workflows.domain.Permission.Contents
 import io.github.typesafegithub.workflows.domain.RunnerType.UbuntuLatest
 import io.github.typesafegithub.workflows.domain.triggers.Push
-import io.github.typesafegithub.workflows.dsl.JobBuilder
 import io.github.typesafegithub.workflows.dsl.expressions.contexts.SecretsContext
 import io.github.typesafegithub.workflows.dsl.expressions.expr
 import io.github.typesafegithub.workflows.dsl.workflow
@@ -77,12 +74,13 @@ workflow(
         runsOn = UbuntuLatest
     ) {
         uses(name = "Check out", action = Checkout(fetchDepth = FetchDepth.Value(0)))
-        val tag = getGitTag()
+        val tag = expr { github.ref_name }
         uses(
             name = "Create Release",
             action = ActionGhRelease(
-                tagName = expr { tag },
-                name = expr { tag },
+                tagName = tag,
+                name = tag,
+                generateReleaseNotes = true,
                 draft = false
             ),
             env = mapOf(GITHUB_TOKEN_ENV to expr { secrets.GITHUB_TOKEN }),
@@ -90,7 +88,7 @@ workflow(
         uses(name = "Set up Java", action = SetupJava(javaVersion = "17", distribution = Temurin))
         run(
             name = "Publish",
-            command = "./gradlew publishPlugins -Pversion='${expr { tag }}'",
+            command = "./gradlew publishPlugins -Pversion='$tag'",
             env = mapOf(
                 GRADLE_PUBLISH_KEY_ENV to expr { secrets.GRADLE_PUBLISH_KEY },
                 GRADLE_PUBLISH_SECRET_ENV to expr { secrets.GRADLE_PUBLISH_SECRET },
@@ -102,8 +100,3 @@ workflow(
         )
     }
 }
-
-fun JobBuilder<*>.getGitTag(): String = uses(
-    name = "Get Tag",
-    action = ActionGetTag_Untyped()
-).outputs.tag
