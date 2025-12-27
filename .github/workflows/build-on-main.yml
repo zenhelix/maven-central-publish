@@ -7,11 +7,7 @@ on:
   push:
     branches:
     - 'main'
-  pull_request:
-    types:
-    - 'closed'
-    branches:
-    - 'main'
+    - '[0-9]+.x'
 permissions:
   contents: 'write'
 jobs:
@@ -21,19 +17,20 @@ jobs:
     steps:
     - id: 'step-0'
       name: 'Check out'
-      uses: 'actions/checkout@v4'
+      uses: 'actions/checkout@v6'
       with:
-        ref: '${{ github.event.pull_request.merge_commit_sha }}'
         fetch-depth: '0'
     - id: 'step-1'
       name: 'Set up Java'
-      uses: 'actions/setup-java@v4'
+      uses: 'actions/setup-java@v5'
       with:
         java-version: '17'
         distribution: 'temurin'
     - id: 'step-2'
-      name: 'Gradle Wrapper Validation'
-      uses: 'gradle/actions/wrapper-validation@v4'
+      name: 'Setup Gradle'
+      uses: 'gradle/actions/setup-gradle@v5'
+      with:
+        gradle-home-cache-cleanup: 'true'
     - id: 'step-3'
       name: 'Check'
       run: './gradlew check'
@@ -48,4 +45,7 @@ jobs:
       uses: 'anothrNick/github-tag-action@v1'
       env:
         GITHUB_TOKEN: '${{ steps.step-4.outputs.token }}'
-        WITH_V: 'false'
+        TAG_PREFIX: ''
+        DEFAULT_BUMP: 'patch'
+        RELEASE_BRANCHES: 'main,[0-9]+\.x'
+        TAG_CONTEXT: 'branch'
