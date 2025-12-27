@@ -63,7 +63,12 @@ workflow(
             action = Checkout(fetchDepth = FetchDepth.Value(0))
         )
         uses(name = "Set up Java", action = SetupJava(javaVersion = "17", distribution = Temurin))
-        uses(name = "Setup Gradle", action = ActionsSetupGradle())
+        uses(
+            name = "Setup Gradle",
+            action = ActionsSetupGradle(
+                gradleHomeCacheCleanup = true
+            )
+        )
         run(name = "Check", command = "./gradlew check")
         val token = uses(
             name = "Get Token",

@@ -9,10 +9,12 @@
 @file:DependsOn("actions:checkout:v6")
 @file:DependsOn("actions:setup-java:v5")
 @file:DependsOn("gradle:actions__setup-gradle:v5")
+@file:DependsOn("codecov:codecov-action:v5")
 
 import io.github.typesafegithub.workflows.actions.actions.Checkout
 import io.github.typesafegithub.workflows.actions.actions.SetupJava
 import io.github.typesafegithub.workflows.actions.actions.SetupJava.Distribution.Temurin
+import io.github.typesafegithub.workflows.actions.codecov.CodecovAction
 import io.github.typesafegithub.workflows.actions.gradle.ActionsSetupGradle
 import io.github.typesafegithub.workflows.domain.RunnerType.UbuntuLatest
 import io.github.typesafegithub.workflows.domain.triggers.PullRequest
@@ -31,7 +33,22 @@ workflow(
     job(id = "Build", name = "Build", runsOn = UbuntuLatest) {
         uses(name = "Check out", action = Checkout())
         uses(name = "Set up Java", action = SetupJava(javaVersion = "17", distribution = Temurin))
-        uses(name = "Setup Gradle", action = ActionsSetupGradle())
+        uses(
+            name = "Setup Gradle",
+            action = ActionsSetupGradle(
+                cacheReadOnly = true,
+                gradleHomeCacheCleanup = true
+            )
+        )
         run(name = "Check", command = "./gradlew check")
+        uses(
+            name = "Upload Coverage to Codecov",
+            action = CodecovAction(
+                files = listOf("build/reports/jacoco/testCodeCoverageReport/testCodeCoverageReport.xml"),
+                flags = listOf("unittests"),
+                failCiIfError = false,
+                verbose = true
+            )
+        )
     }
 }

@@ -9,6 +9,7 @@
 @file:DependsOn("actions:checkout:v6")
 @file:DependsOn("actions:setup-java:v5")
 @file:DependsOn("softprops:action-gh-release:v2")
+@file:DependsOn("mikepenz:release-changelog-builder-action:v6")
 
 import Environment.GITHUB_TOKEN_ENV
 import Environment.GRADLE_PUBLISH_KEY_ENV
@@ -27,6 +28,7 @@ import io.github.typesafegithub.workflows.actions.actions.Checkout
 import io.github.typesafegithub.workflows.actions.actions.Checkout.FetchDepth
 import io.github.typesafegithub.workflows.actions.actions.SetupJava
 import io.github.typesafegithub.workflows.actions.actions.SetupJava.Distribution.Temurin
+import io.github.typesafegithub.workflows.actions.mikepenz.ReleaseChangelogBuilderAction_Untyped
 import io.github.typesafegithub.workflows.actions.softprops.ActionGhRelease
 import io.github.typesafegithub.workflows.domain.Mode.Write
 import io.github.typesafegithub.workflows.domain.Permission.Contents
@@ -75,12 +77,22 @@ workflow(
     ) {
         uses(name = "Check out", action = Checkout(fetchDepth = FetchDepth.Value(0)))
         val tag = expr { github.ref_name }
+
+        val changelogBuilder = uses(
+            name = "Build Changelog",
+            action = ReleaseChangelogBuilderAction_Untyped(
+                configuration_Untyped = ".github/changelog-config.json",
+                toTag_Untyped = tag
+            ),
+            env = mapOf(GITHUB_TOKEN_ENV to expr { secrets.GITHUB_TOKEN })
+        )
+
         uses(
             name = "Create Release",
             action = ActionGhRelease(
                 tagName = tag,
                 name = tag,
-                generateReleaseNotes = true,
+                body = expr { changelogBuilder.outputs["changelog"] },
                 draft = false
             ),
             env = mapOf(GITHUB_TOKEN_ENV to expr { secrets.GITHUB_TOKEN }),

@@ -1,4 +1,4 @@
-# This file was generated using Kotlin DSL (.github/workflows/workflow.branch.main.kts).
+# This file was generated using Kotlin DSL (.github/workflows/.github/workflows/workflow.branch.main.kts).
 # If you want to modify the workflow, please change the Kotlin file and regenerate this YAML file.
 # Generated with https://github.com/typesafegithub/github-workflows-kt
 
@@ -22,6 +22,17 @@ jobs:
     - id: 'step-2'
       name: 'Setup Gradle'
       uses: 'gradle/actions/setup-gradle@v5'
+      with:
+        cache-read-only: 'true'
+        gradle-home-cache-cleanup: 'true'
     - id: 'step-3'
       name: 'Check'
       run: './gradlew check'
+    - id: 'step-4'
+      name: 'Upload Coverage to Codecov'
+      uses: 'codecov/codecov-action@v5'
+      with:
+        fail_ci_if_error: 'false'
+        files: 'build/reports/jacoco/testCodeCoverageReport/testCodeCoverageReport.xml'
+        flags: 'unittests'
+        verbose: 'true'
