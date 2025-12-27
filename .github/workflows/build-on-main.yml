@@ -1,4 +1,4 @@
-# This file was generated using Kotlin DSL (.github/workflows/.github/workflows/workflow.main.main.kts).
+# This file was generated using Kotlin DSL (.github/workflows/workflow.main.main.kts).
 # If you want to modify the workflow, please change the Kotlin file and regenerate this YAML file.
 # Generated with https://github.com/typesafegithub/github-workflows-kt
 
@@ -47,5 +47,5 @@ jobs:
         GITHUB_TOKEN: '${{ steps.step-4.outputs.token }}'
         TAG_PREFIX: ''
         DEFAULT_BUMP: 'patch'
-        RELEASE_BRANCHES: 'main,.*\.x'
+        RELEASE_BRANCHES: 'main,[0-9]+\.x'
         TAG_CONTEXT: 'branch'

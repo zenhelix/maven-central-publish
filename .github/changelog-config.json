@@ -10,7 +10,8 @@
       "title": "## New Features",
       "labels": [
         "feature",
-        "enhancement"
+        "enhancement",
+        "feat"
       ]
     },
     {
@@ -30,7 +31,8 @@
     {
       "title": "## Documentation",
       "labels": [
-        "documentation"
+        "documentation",
+        "docs"
       ]
     },
     {

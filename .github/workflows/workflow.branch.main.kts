@@ -21,7 +21,9 @@ import io.github.typesafegithub.workflows.domain.triggers.PullRequest
 import io.github.typesafegithub.workflows.dsl.workflow
 import io.github.typesafegithub.workflows.yaml.ConsistencyCheckJobConfig.Disabled
 
-check(KotlinVersion.CURRENT.isAtLeast(2, 1, 0)) { "This script requires Kotlin 2.1.0 or later. Current: ${KotlinVersion.CURRENT}" }
+check(KotlinVersion.CURRENT.isAtLeast(2, 1, 0)) {
+    "This script requires Kotlin 2.1.0 or later. Current: ${KotlinVersion.CURRENT}"
+}
 
 workflow(
     name = "Build",
@@ -33,13 +35,7 @@ workflow(
     job(id = "Build", name = "Build", runsOn = UbuntuLatest) {
         uses(name = "Check out", action = Checkout())
         uses(name = "Set up Java", action = SetupJava(javaVersion = "17", distribution = Temurin))
-        uses(
-            name = "Setup Gradle",
-            action = ActionsSetupGradle(
-                cacheReadOnly = true,
-                gradleHomeCacheCleanup = true
-            )
-        )
+        uses(name = "Setup Gradle", action = ActionsSetupGradle(cacheReadOnly = true, gradleHomeCacheCleanup = true))
         run(name = "Check", command = "./gradlew check")
         uses(
             name = "Upload Coverage to Codecov",

@@ -232,6 +232,10 @@ Workflow source files (`.kts`) are located in `.github/workflows/`:
 |`workflow.release.main.kts`
 |`release-on-tag.yml`
 |Creates GitHub Release and publishes to Gradle Plugin Portal
+
+|`workflow.labeler.main.kts`
+|`labeler.yml`
+|Automatically labels PRs based on changed file paths
 |===
 
 *Release Flow*
@@ -329,6 +333,7 @@ After modifying `.kts` files, regenerate YAML:
 ./.github/workflows/workflow.main.main.kts
 ./.github/workflows/workflow.release.main.kts
 ./.github/workflows/workflow.branch.main.kts
+./.github/workflows/workflow.labeler.main.kts
 ----
 
 *Required Secrets*

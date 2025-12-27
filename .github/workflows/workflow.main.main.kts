@@ -13,7 +13,11 @@
 @file:DependsOn("anothrNick:github-tag-action:v1")
 
 import Branches.MAIN_BRANCH_NAME
+import Environment.DEFAULT_BUMP_ENV
 import Environment.GITHUB_TOKEN_ENV
+import Environment.RELEASE_BRANCHES_ENV
+import Environment.TAG_CONTEXT_ENV
+import Environment.TAG_PREFIX_ENV
 import Secrets.ZENHELIX_COMMITER_APP_ID
 import Secrets.ZENHELIX_COMMITER_APP_PRIVATE_KEY
 import io.github.typesafegithub.workflows.actions.actions.Checkout
@@ -32,7 +36,9 @@ import io.github.typesafegithub.workflows.dsl.expressions.expr
 import io.github.typesafegithub.workflows.dsl.workflow
 import io.github.typesafegithub.workflows.yaml.ConsistencyCheckJobConfig.Disabled
 
-check(KotlinVersion.CURRENT.isAtLeast(2, 1, 0)) { "This script requires Kotlin 2.1.0 or later. Current: ${KotlinVersion.CURRENT}" }
+check(KotlinVersion.CURRENT.isAtLeast(2, 1, 0)) {
+    "This script requires Kotlin 2.1.0 or later. Current: ${KotlinVersion.CURRENT}"
+}
 
 object Secrets {
     val SecretsContext.ZENHELIX_COMMITER_APP_ID by SecretsContext.propertyToExprPath
@@ -41,6 +47,11 @@ object Secrets {
 
 object Environment {
     const val GITHUB_TOKEN_ENV = "GITHUB_TOKEN"
+
+    const val TAG_PREFIX_ENV = "TAG_PREFIX"
+    const val DEFAULT_BUMP_ENV = "DEFAULT_BUMP"
+    const val RELEASE_BRANCHES_ENV = "RELEASE_BRANCHES"
+    const val TAG_CONTEXT_ENV = "TAG_CONTEXT"
 }
 
 object Branches {
@@ -49,43 +60,31 @@ object Branches {
 
 workflow(
     name = "Create Tag",
-    on = listOf(
-        Push(branches = listOf(MAIN_BRANCH_NAME, "[0-9]+.x"))
-    ),
+    on = listOf(Push(branches = listOf(MAIN_BRANCH_NAME, "[0-9]+.x"))),
     permissions = mapOf(Contents to Write),
     sourceFile = __FILE__,
     targetFileName = "build-on-main.yml",
     consistencyCheckJobConfig = Disabled
 ) {
     job(id = "create_release_tag", name = "Create Release Tag", runsOn = UbuntuLatest) {
-        uses(
-            name = "Check out",
-            action = Checkout(fetchDepth = FetchDepth.Value(0))
-        )
+        uses(name = "Check out", action = Checkout(fetchDepth = FetchDepth.Value(0)))
         uses(name = "Set up Java", action = SetupJava(javaVersion = "17", distribution = Temurin))
-        uses(
-            name = "Setup Gradle",
-            action = ActionsSetupGradle(
-                gradleHomeCacheCleanup = true
-            )
-        )
+        uses(name = "Setup Gradle", action = ActionsSetupGradle(gradleHomeCacheCleanup = true))
         run(name = "Check", command = "./gradlew check")
         val token = uses(
-            name = "Get Token",
-            action = WorkflowApplicationTokenAction_Untyped(
+            name = "Get Token", action = WorkflowApplicationTokenAction_Untyped(
                 applicationId_Untyped = expr { secrets.ZENHELIX_COMMITER_APP_ID },
                 applicationPrivateKey_Untyped = expr { secrets.ZENHELIX_COMMITER_APP_PRIVATE_KEY }
             )
         ).outputs.token
         uses(
-            name = "Bump version and push tag",
-            action = GithubTagAction(),
+            name = "Bump version and push tag", action = GithubTagAction(),
             env = mapOf(
                 GITHUB_TOKEN_ENV to expr { token },
-                "TAG_PREFIX" to "",
-                "DEFAULT_BUMP" to "patch",
-                "RELEASE_BRANCHES" to "main,.*\\.x",
-                "TAG_CONTEXT" to "branch"
+                TAG_PREFIX_ENV to "",
+                DEFAULT_BUMP_ENV to "patch",
+                RELEASE_BRANCHES_ENV to "main,[0-9]+\\.x",
+                TAG_CONTEXT_ENV to "branch"
             )
         )
     }

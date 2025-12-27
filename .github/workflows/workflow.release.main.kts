@@ -8,6 +8,7 @@
 // Actions
 @file:DependsOn("actions:checkout:v6")
 @file:DependsOn("actions:setup-java:v5")
+@file:DependsOn("gradle:actions__setup-gradle:v5")
 @file:DependsOn("softprops:action-gh-release:v2")
 @file:DependsOn("mikepenz:release-changelog-builder-action:v6")
 
@@ -28,6 +29,7 @@ import io.github.typesafegithub.workflows.actions.actions.Checkout
 import io.github.typesafegithub.workflows.actions.actions.Checkout.FetchDepth
 import io.github.typesafegithub.workflows.actions.actions.SetupJava
 import io.github.typesafegithub.workflows.actions.actions.SetupJava.Distribution.Temurin
+import io.github.typesafegithub.workflows.actions.gradle.ActionsSetupGradle
 import io.github.typesafegithub.workflows.actions.mikepenz.ReleaseChangelogBuilderAction_Untyped
 import io.github.typesafegithub.workflows.actions.softprops.ActionGhRelease
 import io.github.typesafegithub.workflows.domain.Mode.Write
@@ -39,7 +41,9 @@ import io.github.typesafegithub.workflows.dsl.expressions.expr
 import io.github.typesafegithub.workflows.dsl.workflow
 import io.github.typesafegithub.workflows.yaml.ConsistencyCheckJobConfig.Disabled
 
-check(KotlinVersion.CURRENT.isAtLeast(2, 1, 0)) { "This script requires Kotlin 2.1.0 or later. Current: ${KotlinVersion.CURRENT}" }
+check(KotlinVersion.CURRENT.isAtLeast(2, 1, 0)) {
+    "This script requires Kotlin 2.1.0 or later. Current: ${KotlinVersion.CURRENT}"
+}
 
 object Secrets {
     val SecretsContext.GRADLE_PUBLISH_KEY by SecretsContext.propertyToExprPath
@@ -76,6 +80,7 @@ workflow(
         runsOn = UbuntuLatest
     ) {
         uses(name = "Check out", action = Checkout(fetchDepth = FetchDepth.Value(0)))
+
         val tag = expr { github.ref_name }
 
         val changelogBuilder = uses(
@@ -98,6 +103,7 @@ workflow(
             env = mapOf(GITHUB_TOKEN_ENV to expr { secrets.GITHUB_TOKEN }),
         )
         uses(name = "Set up Java", action = SetupJava(javaVersion = "17", distribution = Temurin))
+        uses(name = "Setup Gradle", action = ActionsSetupGradle(gradleHomeCacheCleanup = true))
         run(
             name = "Publish",
             command = "./gradlew publishPlugins -Pversion='$tag'",

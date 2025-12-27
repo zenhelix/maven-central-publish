@@ -18,13 +18,9 @@ import io.github.typesafegithub.workflows.dsl.expressions.expr
 import io.github.typesafegithub.workflows.dsl.workflow
 import io.github.typesafegithub.workflows.yaml.ConsistencyCheckJobConfig.Disabled
 
-check(
-    KotlinVersion.CURRENT.isAtLeast(
-        2,
-        1,
-        0
-    )
-) { "This script requires Kotlin 2.1.0 or later. Current: ${KotlinVersion.CURRENT}" }
+check(KotlinVersion.CURRENT.isAtLeast(2, 1, 0)) {
+    "This script requires Kotlin 2.1.0 or later. Current: ${KotlinVersion.CURRENT}"
+}
 
 workflow(
     name = "PR Labeler",
@@ -40,10 +36,7 @@ workflow(
     job(id = "label", name = "Label PR", runsOn = UbuntuLatest) {
         uses(
             name = "Label PR based on file paths",
-            action = Labeler(
-                repoToken = expr { secrets.GITHUB_TOKEN },
-                syncLabels = true
-            )
+            action = Labeler(repoToken = expr { secrets.GITHUB_TOKEN }, syncLabels = true)
         )
     }
 }
