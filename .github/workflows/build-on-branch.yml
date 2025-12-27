@@ -28,11 +28,3 @@ jobs:
     - id: 'step-3'
       name: 'Check'
       run: './gradlew check'
-    - id: 'step-4'
-      name: 'Upload Coverage to Codecov'
-      uses: 'codecov/codecov-action@v5'
-      with:
-        fail_ci_if_error: 'false'
-        files: 'build/reports/jacoco/testCodeCoverageReport/testCodeCoverageReport.xml'
-        flags: 'unittests'
-        verbose: 'true'
