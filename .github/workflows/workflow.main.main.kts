@@ -6,9 +6,9 @@
 @file:Repository("https://bindings.krzeminski.it")
 
 // Actions
-@file:DependsOn("actions:checkout:v4")
-@file:DependsOn("gradle:actions__wrapper-validation:v4")
-@file:DependsOn("actions:setup-java:v4")
+@file:DependsOn("actions:checkout:v6")
+@file:DependsOn("gradle:actions__wrapper-validation:v5")
+@file:DependsOn("actions:setup-java:v5")
 @file:DependsOn("peter-murray:workflow-application-token-action:v4")
 @file:DependsOn("anothrNick:github-tag-action:v1")
 
@@ -70,10 +70,7 @@ workflow(
         )
         uses(name = "Set up Java", action = SetupJava(javaVersion = "17", distribution = Temurin))
         uses(name = "Gradle Wrapper Validation", action = ActionsWrapperValidation())
-        run(
-            name = "Check",
-            command = "./gradlew check"
-        )
+        run(name = "Check", command = "./gradlew check")
         val token = uses(
             name = "Get Token",
             action = WorkflowApplicationTokenAction_Untyped(

@@ -6,9 +6,9 @@
 @file:Repository("https://bindings.krzeminski.it")
 
 // Actions
-@file:DependsOn("actions:checkout:v4")
-@file:DependsOn("gradle:actions__wrapper-validation:v4")
-@file:DependsOn("actions:setup-java:v4")
+@file:DependsOn("actions:checkout:v6")
+@file:DependsOn("gradle:actions__wrapper-validation:v5")
+@file:DependsOn("actions:setup-java:v5")
 
 import io.github.typesafegithub.workflows.actions.actions.Checkout
 import io.github.typesafegithub.workflows.actions.actions.SetupJava
@@ -32,9 +32,6 @@ workflow(
         uses(name = "Check out", action = Checkout())
         uses(name = "Set up Java", action = SetupJava(javaVersion = "17", distribution = Temurin))
         uses(name = "Gradle Wrapper Validation", action = ActionsWrapperValidation())
-        run(
-            name = "Check",
-            command = "./gradlew check"
-        )
+        run(name = "Check", command = "./gradlew check")
     }
 }

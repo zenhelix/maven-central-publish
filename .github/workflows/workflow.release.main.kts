@@ -6,8 +6,8 @@
 @file:Repository("https://bindings.krzeminski.it")
 
 // Actions
-@file:DependsOn("actions:checkout:v4")
-@file:DependsOn("actions:setup-java:v4")
+@file:DependsOn("actions:checkout:v6")
+@file:DependsOn("actions:setup-java:v5")
 @file:DependsOn("softprops:action-gh-release:v2")
 @file:DependsOn("dawidd6:action-get-tag:v1")
 
