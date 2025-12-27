@@ -7,13 +7,13 @@
 
 // Actions
 @file:DependsOn("actions:checkout:v6")
-@file:DependsOn("gradle:actions__wrapper-validation:v5")
 @file:DependsOn("actions:setup-java:v5")
+@file:DependsOn("gradle:actions__setup-gradle:v5")
 
 import io.github.typesafegithub.workflows.actions.actions.Checkout
 import io.github.typesafegithub.workflows.actions.actions.SetupJava
 import io.github.typesafegithub.workflows.actions.actions.SetupJava.Distribution.Temurin
-import io.github.typesafegithub.workflows.actions.gradle.ActionsWrapperValidation
+import io.github.typesafegithub.workflows.actions.gradle.ActionsSetupGradle
 import io.github.typesafegithub.workflows.domain.RunnerType.UbuntuLatest
 import io.github.typesafegithub.workflows.domain.triggers.PullRequest
 import io.github.typesafegithub.workflows.dsl.workflow
@@ -31,7 +31,7 @@ workflow(
     job(id = "Build", name = "Build", runsOn = UbuntuLatest) {
         uses(name = "Check out", action = Checkout())
         uses(name = "Set up Java", action = SetupJava(javaVersion = "17", distribution = Temurin))
-        uses(name = "Gradle Wrapper Validation", action = ActionsWrapperValidation())
+        uses(name = "Setup Gradle", action = ActionsSetupGradle())
         run(name = "Check", command = "./gradlew check")
     }
 }

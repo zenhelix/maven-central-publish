@@ -7,8 +7,8 @@
 
 // Actions
 @file:DependsOn("actions:checkout:v6")
-@file:DependsOn("gradle:actions__wrapper-validation:v5")
 @file:DependsOn("actions:setup-java:v5")
+@file:DependsOn("gradle:actions__setup-gradle:v5")
 @file:DependsOn("peter-murray:workflow-application-token-action:v4")
 @file:DependsOn("anothrNick:github-tag-action:v1")
 
@@ -21,7 +21,7 @@ import io.github.typesafegithub.workflows.actions.actions.Checkout.FetchDepth
 import io.github.typesafegithub.workflows.actions.actions.SetupJava
 import io.github.typesafegithub.workflows.actions.actions.SetupJava.Distribution.Temurin
 import io.github.typesafegithub.workflows.actions.anothrnick.GithubTagAction
-import io.github.typesafegithub.workflows.actions.gradle.ActionsWrapperValidation
+import io.github.typesafegithub.workflows.actions.gradle.ActionsSetupGradle
 import io.github.typesafegithub.workflows.actions.petermurray.WorkflowApplicationTokenAction_Untyped
 import io.github.typesafegithub.workflows.domain.Mode.Write
 import io.github.typesafegithub.workflows.domain.Permission.Contents
@@ -63,7 +63,7 @@ workflow(
             action = Checkout(fetchDepth = FetchDepth.Value(0))
         )
         uses(name = "Set up Java", action = SetupJava(javaVersion = "17", distribution = Temurin))
-        uses(name = "Gradle Wrapper Validation", action = ActionsWrapperValidation())
+        uses(name = "Setup Gradle", action = ActionsSetupGradle())
         run(name = "Check", command = "./gradlew check")
         val token = uses(
             name = "Get Token",
