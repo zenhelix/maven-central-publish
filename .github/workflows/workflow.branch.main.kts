@@ -14,6 +14,8 @@ import io.github.typesafegithub.workflows.actions.actions.Checkout
 import io.github.typesafegithub.workflows.actions.actions.SetupJava
 import io.github.typesafegithub.workflows.actions.actions.SetupJava.Distribution.Temurin
 import io.github.typesafegithub.workflows.actions.gradle.ActionsSetupGradle
+import io.github.typesafegithub.workflows.domain.Mode.Read
+import io.github.typesafegithub.workflows.domain.Permission.Contents
 import io.github.typesafegithub.workflows.domain.RunnerType.UbuntuLatest
 import io.github.typesafegithub.workflows.domain.triggers.PullRequest
 import io.github.typesafegithub.workflows.dsl.workflow
@@ -26,6 +28,7 @@ check(KotlinVersion.CURRENT.isAtLeast(2, 1, 0)) {
 workflow(
     name = "Build",
     on = listOf(PullRequest()),
+    permissions = mapOf(Contents to Read),
     sourceFile = __FILE__,
     targetFileName = "build-on-branch.yml",
     consistencyCheckJobConfig = Disabled
