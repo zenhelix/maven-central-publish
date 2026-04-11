@@ -76,10 +76,19 @@ public class RetryHandler(
     }
 
     /**
-     * Calculates exponential backoff delay: baseDelay * 2^(attempt-1)
+     * Calculates exponential backoff delay: baseDelay * 2^(attempt-1).
+     * The shift is capped at 30 to prevent Long overflow for large attempt values.
+     * The result is also capped at [MAX_BACKOFF_DELAY_MILLIS] to keep delays practical.
      */
-    private fun calculateBackoffDelay(attempt: Int): Long {
-        return baseDelay.toMillis() * (1L shl (attempt - 1))
+    internal fun calculateBackoffDelay(attempt: Int): Long {
+        val maxShift = 30
+        val shift = (attempt - 1).coerceAtMost(maxShift)
+        return (baseDelay.toMillis() * (1L shl shift)).coerceAtMost(MAX_BACKOFF_DELAY_MILLIS)
+    }
+
+    internal companion object {
+        /** Maximum backoff delay: 5 minutes. */
+        internal const val MAX_BACKOFF_DELAY_MILLIS: Long = 5 * 60 * 1000L
     }
 }
 
