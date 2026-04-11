@@ -67,9 +67,13 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
                 configureRootProjectLifecycle(target, mavenCentralUploaderExtension)
             }
         } else {
-            // Subproject: register one-time warning check
-            target.gradle.projectsEvaluated {
-                emitIndependentPublishingWarningIfNeeded(target)
+            // Subproject: register one-time warning check on root
+            val rootProject = target.rootProject
+            if (!rootProject.extensions.extraProperties.has(WARN_REGISTERED_FLAG)) {
+                rootProject.extensions.extraProperties[WARN_REGISTERED_FLAG] = true
+                target.gradle.projectsEvaluated {
+                    emitIndependentPublishingWarningIfNeeded(rootProject)
+                }
             }
         }
     }
@@ -159,11 +163,13 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
             projectsToUnwire.forEach { project ->
                 project.findPublishLifecycleTask().configure {
                     setDependsOn(dependsOn.filterNot { dep ->
-                        when (dep) {
-                            is org.gradle.api.tasks.TaskProvider<*> -> dep.name == "publishAllPublicationsToMavenCentralPortalRepository"
-                            is org.gradle.api.Task -> dep.name == "publishAllPublicationsToMavenCentralPortalRepository"
-                            else -> false
+                        val name = when (dep) {
+                            is org.gradle.api.tasks.TaskProvider<*> -> dep.name
+                            is org.gradle.api.Task -> dep.name
+                            is String -> dep
+                            else -> null
                         }
+                        name == PUBLISH_ALL_PUBLICATIONS_TASK_NAME
                     })
                 }
             }
@@ -171,29 +177,19 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
         // Mode 1 single-module: lifecycle wiring already done in configureZipDeploymentTasks
     }
 
-    private fun emitIndependentPublishingWarningIfNeeded(subproject: Project) {
-        val rootProject = subproject.rootProject
-
+    private fun emitIndependentPublishingWarningIfNeeded(rootProject: Project) {
         // Skip if root has the plugin (aggregation mode handles this)
         if (rootProject.hasMavenCentralPortalExtension()) {
             return
         }
 
-        // Count subprojects with the plugin
-        val subprojectsWithPlugin = rootProject.subprojects.count { it.hasMavenCentralPortalExtension() }
+        val subprojectsWithPlugin = rootProject.subprojects.filter { it.hasMavenCentralPortalExtension() }
 
-        if (subprojectsWithPlugin > 1) {
-            // Emit warning only once (from the first subproject alphabetically to avoid duplicates)
-            val firstSubproject = rootProject.subprojects
-                .filter { it.hasMavenCentralPortalExtension() }
-                .minByOrNull { it.name }
-
-            if (subproject == firstSubproject) {
-                subproject.logger.warn(
-                    "Multiple projects publish to Maven Central independently. " +
-                    "For atomic multi-module publishing, apply the plugin to the root project."
-                )
-            }
+        if (subprojectsWithPlugin.size > 1) {
+            rootProject.logger.warn(
+                "Multiple projects publish to Maven Central independently. " +
+                "For atomic multi-module publishing, apply the plugin to the root project."
+            )
         }
     }
 
@@ -282,5 +278,10 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
     public companion object {
         public const val MAVEN_CENTRAL_PORTAL_NAME: String = "mavenCentralPortal"
         public const val MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID: String = "io.github.zenhelix.maven-central-publish"
+
+        private val PUBLISH_ALL_PUBLICATIONS_TASK_NAME: String =
+            "publishAllPublicationsTo${MAVEN_CENTRAL_PORTAL_NAME.capitalized()}Repository"
+
+        private const val WARN_REGISTERED_FLAG: String = "io.github.zenhelix.maven-central-publish.warnRegistered"
     }
 }
