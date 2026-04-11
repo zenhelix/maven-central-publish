@@ -148,6 +148,18 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
         }
     }
 
+    /**
+     * Configures the root project's publish lifecycle based on whether subprojects have publications.
+     *
+     * When subprojects have publications, this activates **atomic aggregation mode**:
+     * all modules are bundled into a single deployment. To prevent duplicate deployments,
+     * the per-project `publishAllPublicationsToMavenCentralPortalRepository` tasks are unwired
+     * from the `publish` lifecycle task — both for subprojects and the root project itself.
+     * The root `publish` task is then wired to `publishAllModulesToMavenCentralPortalRepository`
+     * which handles the aggregated bundle.
+     *
+     * Without subproject publications, single-module mode is used (wired in [configureZipDeploymentTasks]).
+     */
     private fun configureRootProjectLifecycle(rootProject: Project, extension: MavenCentralUploaderExtension) {
         val subprojectsWithPublications = rootProject.subprojects.filter {
             it.findMavenPublications()?.isNotEmpty() == true

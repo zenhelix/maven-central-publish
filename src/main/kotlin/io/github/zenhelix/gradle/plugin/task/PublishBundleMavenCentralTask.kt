@@ -180,9 +180,16 @@ public abstract class PublishBundleMavenCentralTask @Inject constructor(
     }
 
     /**
-     * Waits for deployment completion by polling the status endpoint.
-     * Network errors are handled by the API client's retry mechanism.
-     * This method only handles the polling logic - checking if deployment is still in progress.
+     * Polls the deployment status endpoint until the deployment reaches a terminal state.
+     *
+     * State machine transitions:
+     * - PENDING → VALIDATING → VALIDATED → PUBLISHING → PUBLISHED (success for AUTOMATIC)
+     * - PENDING → VALIDATING → VALIDATED (success for USER_MANAGED — user releases manually)
+     * - Any state → FAILED (error — deployment is dropped by caller)
+     * - UNKNOWN is treated as FAILED
+     *
+     * If the deployment does not reach a terminal state within [maxChecks] polls,
+     * a [GradleException] is thrown and the caller is responsible for dropping the deployment.
      */
     private fun waitForDeploymentCompletion(
         client: MavenCentralApiClient,
