@@ -140,6 +140,25 @@ class PublishBundleDropBehaviorTest {
     }
 
     @Test
+    fun `race condition - should handle gracefully when deployment moves to PUBLISHING between check and drop`() {
+        // Simulate: last status check sees VALIDATING, but by the time we try to drop,
+        // deployment has moved to PUBLISHING and Maven Central returns 400
+        every { mockClient.deploymentStatus(any(), any()) } returns statusReturning(DeploymentStateType.VALIDATING)
+        every { mockClient.dropDeployment(any(), any()) } returns HttpResponseResult.Error(
+            data = """{"httpStatus":400,"errorCode":10400,"message":"Can only drop deployments that are in a VALIDATED or FAILED state."}""",
+            httpStatus = 400
+        )
+
+        // Should still throw the timeout exception, but NOT crash on the drop failure
+        assertThatThrownBy { executePublishTask() }
+            .isInstanceOf(DeploymentFailedException::class.java)
+            .hasMessageContaining("did not complete after 2 status checks")
+
+        // Drop was attempted (state was droppable at check time) but failed gracefully
+        verify(exactly = 1) { mockClient.dropDeployment(any(), eq(deploymentId)) }
+    }
+
+    @Test
     fun `should succeed for USER_MANAGED when deployment reaches VALIDATED state`() {
         every { mockClient.deploymentStatus(any(), any()) } returns statusReturning(DeploymentStateType.VALIDATED)
 
