@@ -111,10 +111,23 @@ allprojects {
 
 internal fun mavenCentralPortal() = """
 mavenCentralPortal {
-    baseUrl = "http://test" 
+    baseUrl = "https://test.invalid"
     credentials {
-        username = "stub"
-        password = "stub"
+        usernamePassword {
+            username = "stub"
+            password = "stub"
+        }
+    }
+}
+""".trimIndent()
+
+internal fun mavenCentralPortalBearer() = """
+mavenCentralPortal {
+    baseUrl = "https://test.invalid"
+    credentials {
+        bearer {
+            token = "stub-bearer-token"
+        }
     }
 }
 """.trimIndent()

@@ -14,6 +14,7 @@ import test.createKotlinCommonMainClass
 import test.distributionsDirectory
 import test.group
 import test.mavenCentralPortal
+import test.mavenCentralPortalBearer
 import test.moduleBundleFile
 import test.moduleBundlePath
 import test.moduleSplitBundleFile
@@ -1226,6 +1227,39 @@ class MavenCentralUploaderPluginFunctionalTest {
         ).containsMavenArtifacts("test.zenhelix", moduleName, version) {
             standardJavaLibrary()
         }
+    }
+
+    @Test
+    fun `zip deployment bundle with bearer token credentials`() {
+        val version = "0.1.0"
+
+        testProjectDir.settingsGradleFile().writeText(settings("test"))
+        testProjectDir.buildGradleFile().writeText(
+            """
+            plugins {
+                `java-library`
+                id("$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
+            }
+
+            ${group(version = version)}
+
+            publishing {
+                repositories {
+                    mavenLocal()
+                    ${mavenCentralPortalBearer()}
+                }
+            }
+
+            ${signing()}
+            $pom
+            """.trimIndent()
+        )
+
+        testProjectDir.createJavaMainClass()
+
+        GradleDryRunOutputAssert
+            .assertThat(gradleDryRunRunner(testProjectDir, "zipDeploymentAllPublications"))
+            .containsTask(":zipDeploymentAllPublications")
     }
 
 }
