@@ -7,6 +7,7 @@ import io.github.zenhelix.gradle.plugin.task.PublicationInfo
 import io.github.zenhelix.gradle.plugin.task.ZipDeploymentTask
 import io.github.zenhelix.gradle.plugin.utils.findMavenPublications
 import io.github.zenhelix.gradle.plugin.utils.findPublishLifecycleTask
+import io.github.zenhelix.gradle.plugin.utils.hasMavenCentralPortalExtension
 import io.github.zenhelix.gradle.plugin.utils.mapModel
 import io.github.zenhelix.gradle.plugin.utils.registerChecksumTask
 import io.github.zenhelix.gradle.plugin.utils.registerChecksumsAllPublicationsTask
@@ -30,6 +31,21 @@ import org.gradle.kotlin.dsl.named
 import org.gradle.kotlin.dsl.register
 import org.gradle.plugins.signing.SigningPlugin
 
+/**
+ * Gradle plugin for publishing artifacts to Maven Central via the Publisher API.
+ *
+ * Supports two publishing modes:
+ * - **Independent (default):** Each project that applies the plugin publishes its own bundle.
+ *   The `publish` lifecycle task depends on `publishAllPublicationsToMavenCentralPortalRepository`.
+ * - **Atomic aggregation:** When applied to the root project and subprojects have publications,
+ *   all modules are aggregated into a single deployment bundle. Subproject `publish` tasks
+ *   do not trigger independent Maven Central uploads.
+ *
+ * Mode detection:
+ * - Plugin on root + subprojects with publications → atomic aggregation
+ * - Plugin on root only (no subproject publications) → independent (single-module)
+ * - Plugin on subprojects only → independent per subproject (with warning)
+ */
 public class MavenCentralUploaderPlugin : Plugin<Project> {
 
     override fun apply(target: Project) {
@@ -49,6 +65,11 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
         if (target == target.rootProject) {
             target.gradle.projectsEvaluated {
                 configureRootProjectLifecycle(target, mavenCentralUploaderExtension)
+            }
+        } else {
+            // Subproject: register one-time warning check
+            target.gradle.projectsEvaluated {
+                emitIndependentPublishingWarningIfNeeded(target)
             }
         }
     }
@@ -148,6 +169,32 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
             }
         }
         // Mode 1 single-module: lifecycle wiring already done in configureZipDeploymentTasks
+    }
+
+    private fun emitIndependentPublishingWarningIfNeeded(subproject: Project) {
+        val rootProject = subproject.rootProject
+
+        // Skip if root has the plugin (aggregation mode handles this)
+        if (rootProject.hasMavenCentralPortalExtension()) {
+            return
+        }
+
+        // Count subprojects with the plugin
+        val subprojectsWithPlugin = rootProject.subprojects.count { it.hasMavenCentralPortalExtension() }
+
+        if (subprojectsWithPlugin > 1) {
+            // Emit warning only once (from the first subproject alphabetically to avoid duplicates)
+            val firstSubproject = rootProject.subprojects
+                .filter { it.hasMavenCentralPortalExtension() }
+                .minByOrNull { it.name }
+
+            if (subproject == firstSubproject) {
+                subproject.logger.warn(
+                    "Multiple projects publish to Maven Central independently. " +
+                    "For atomic multi-module publishing, apply the plugin to the root project."
+                )
+            }
+        }
     }
 
     private fun createAggregationTasks(rootProject: Project, extension: MavenCentralUploaderExtension) {

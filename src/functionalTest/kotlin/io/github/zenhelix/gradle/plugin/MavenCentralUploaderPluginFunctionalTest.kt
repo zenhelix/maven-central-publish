@@ -27,6 +27,7 @@ import test.testkit.GradleTasksOutputAssert
 import test.testkit.gradleDryRunRunner
 import test.testkit.gradleRunnerDebug
 import test.testkit.gradleTasksRunner
+import org.assertj.core.api.Assertions.assertThat as assertThatString
 import test.utils.ZipFileAssert.Companion.assertThat
 import test.utils.containsMavenArtifacts
 import test.utils.containsSomeMavenArtifacts
@@ -964,6 +965,60 @@ class MavenCentralUploaderPluginFunctionalTest {
         BuildOutputAssert.assertThat(result.output)
             .containsPublishingLogCount(1)
             .containsPublishingLog("test-library-allModules-$version.zip", "AUTOMATIC", null)
+    }
+
+    @Test
+    fun `should warn when multiple subprojects publish independently without root plugin`() {
+        val version = "1.0.0"
+        val module1 = "lib-core"
+        val module2 = "lib-api"
+
+        testProjectDir.settingsGradleFile().writeText(settings("test-library", module1, module2))
+
+        // Root does NOT apply the plugin
+        testProjectDir.buildGradleFile().writeText(
+            """
+            ${group(version = version)}
+            """.trimIndent()
+        )
+
+        listOf(module1, module2).forEach { module ->
+            testProjectDir.buildGradleFile(module).writeText(
+                """
+                plugins {
+                    `java-library`
+                    id("$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
+                }
+
+                publishing {
+                    repositories {
+                        mavenLocal()
+                        ${mavenCentralPortal()}
+                    }
+                    publications {
+                        create<MavenPublication>("mavenJava") {
+                            from(components["java"])
+                        }
+                    }
+                }
+
+                ${signing()}
+                $pom
+                """.trimIndent()
+            )
+        }
+
+        testProjectDir.createJavaMainClass(module1)
+        testProjectDir.createJavaMainClass(module2)
+
+        val result = gradleRunnerDebug(testProjectDir) {
+            withVersion(version)
+            withTask("publish")
+        }
+
+        assertThatString(result.output).contains(
+            "Multiple projects publish to Maven Central independently"
+        )
     }
 
     @Test
