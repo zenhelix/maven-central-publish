@@ -1,5 +1,6 @@
 package io.github.zenhelix.gradle.plugin.utils
 
+import io.github.zenhelix.gradle.plugin.client.model.Failure
 import java.time.Duration
 import org.assertj.core.api.Assertions.assertThat
 import org.gradle.api.logging.Logger
@@ -46,25 +47,20 @@ class RetryHandlerBackoffTest {
         val handler = RetryHandler(maxRetries = 3, baseDelay = Duration.ofMillis(100), logger = logger)
         val attemptTimestamps = mutableListOf<Long>()
 
-        try {
-            handler.executeWithRetry(
-                operation = { attempt ->
-                    attemptTimestamps.add(System.currentTimeMillis())
-                    throw RuntimeException("always fails")
-                },
-                shouldRetry = { true }
-            )
-        } catch (e: RuntimeException) {
-            // Expected
-        }
+        val result = handler.executeWithRetry(
+            operation = {
+                attemptTimestamps.add(System.currentTimeMillis())
+                Failure(RuntimeException("always fails"))
+            },
+            shouldRetry = { true }
+        )
 
+        assertThat(result.errorOrNull()).isNotNull()
         assertThat(attemptTimestamps).hasSize(3)
 
-        // Between attempt 1 and 2: ~100ms (baseDelay * 2^0)
         val delay1 = attemptTimestamps[1] - attemptTimestamps[0]
         assertThat(delay1).isBetween(50L, 500L)
 
-        // Between attempt 2 and 3: ~200ms (baseDelay * 2^1)
         val delay2 = attemptTimestamps[2] - attemptTimestamps[1]
         assertThat(delay2).isBetween(100L, 800L)
     }

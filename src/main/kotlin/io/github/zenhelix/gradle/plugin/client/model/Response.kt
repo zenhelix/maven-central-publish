@@ -13,19 +13,53 @@ public sealed class ResponseResult<out S : Any, out E : Any> {
 public sealed class HttpResponseResult<out S : Any, out E : Any>(
     public open val httpStatus: Int?,
     public open val httpHeaders: Map<String, List<String>>?
-) : ResponseResult<S, E>() {
+) : ResponseResult<S, E>(), ResultLike<S, E?> {
 
-    private val defaultException: (data: E?, cause: Exception?, httpStatus: Int?, httpHeaders: Map<String, List<String>>?) -> RuntimeException =
-        { data, cause, httpStatus, httpHeaders ->
-            IllegalStateException("Error request $data $httpStatus, $httpHeaders", cause)
-        }
+    override fun <R> fold(onSuccess: (S) -> R, onFailure: (E?) -> R): R = when (this) {
+        is Success         -> onSuccess(data)
+        is Error           -> onFailure(data)
+        is UnexpectedError -> onFailure(null)
+    }
 
-    public fun result(exception: (data: E?, cause: Exception?, httpStatus: Int?, httpHeaders: Map<String, List<String>>?) -> RuntimeException = defaultException): S =
-        when (this) {
-            is Success         -> data
-            is Error           -> throw exception(data, cause, httpStatus, httpHeaders)
-            is UnexpectedError -> throw IllegalStateException("Error request $httpStatus, $httpHeaders", cause)
-        }
+    public fun <R> foldHttp(
+        onSuccess: (data: S, httpStatus: Int, httpHeaders: Map<String, List<String>>) -> R,
+        onError: (data: E?, cause: Exception?, httpStatus: Int, httpHeaders: Map<String, List<String>>) -> R,
+        onUnexpected: (cause: Exception, httpStatus: Int?, httpHeaders: Map<String, List<String>>?) -> R
+    ): R = when (this) {
+        is Success         -> onSuccess(data, httpStatus, httpHeaders)
+        is Error           -> onError(data, cause, httpStatus, httpHeaders)
+        is UnexpectedError -> onUnexpected(cause, httpStatus, httpHeaders)
+    }
+
+    override fun getOrNull(): S? = when (this) {
+        is Success -> data
+        else       -> null
+    }
+
+    override fun errorOrNull(): E? = when (this) {
+        is Error -> data
+        else     -> null
+    }
+
+    public fun causeOrNull(): Exception? = when (this) {
+        is Error           -> cause
+        is UnexpectedError -> cause
+        is Success         -> null
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    override fun <R> map(transform: (S) -> R): ResultLike<R, E?> = when (this) {
+        is Success         -> Success(transform(data) as Any, httpStatus, httpHeaders) as ResultLike<R, E?>
+        is Error           -> this as ResultLike<R, E?>
+        is UnexpectedError -> this as ResultLike<R, E?>
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    override fun <R> flatMap(transform: (S) -> ResultLike<R, @UnsafeVariance E?>): ResultLike<R, E?> = when (this) {
+        is Success         -> transform(data)
+        is Error           -> this as ResultLike<R, E?>
+        is UnexpectedError -> this as ResultLike<R, E?>
+    }
 
     public companion object {
         public fun <S : Any, E : Any> of(result: ResponseResult<S, E>): HttpResponseResult<S, E> = when (result) {

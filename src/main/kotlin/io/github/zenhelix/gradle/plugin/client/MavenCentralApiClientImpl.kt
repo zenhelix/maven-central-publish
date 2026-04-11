@@ -8,8 +8,10 @@ import com.fasterxml.jackson.module.kotlin.readValue
 import io.github.zenhelix.gradle.plugin.client.model.Credentials
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentStateType
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentStatus
+import io.github.zenhelix.gradle.plugin.client.model.Failure
 import io.github.zenhelix.gradle.plugin.client.model.HttpResponseResult
 import io.github.zenhelix.gradle.plugin.client.model.PublishingType
+import io.github.zenhelix.gradle.plugin.client.model.Success
 import io.github.zenhelix.gradle.plugin.utils.RetryHandler
 import java.net.URI
 import java.net.URLEncoder
@@ -225,25 +227,29 @@ public class MavenCentralApiClientImpl(
         request: HttpRequest,
         operationName: String,
         responseHandler: (HttpResponse<String>, String) -> HttpResponseResult<T, String>
-    ): HttpResponseResult<T, String> = try {
-        retryHandler.executeWithRetry(
+    ): HttpResponseResult<T, String> {
+        val result = retryHandler.executeWithRetry(
             operation = { attempt ->
-                val startTime = System.currentTimeMillis()
-                val response = httpClient.send(request, BodyHandlers.ofString(UTF_8))
-                val duration = System.currentTimeMillis() - startTime
+                try {
+                    val startTime = System.currentTimeMillis()
+                    val response = httpClient.send(request, BodyHandlers.ofString(UTF_8))
+                    val duration = System.currentTimeMillis() - startTime
 
-                logger.debug(
-                    "HTTP request completed: operation={}, status={}, duration={}ms, attempt={}",
-                    operationName, response.statusCode(), duration, attempt
-                )
+                    logger.debug(
+                        "HTTP request completed: operation={}, status={}, duration={}ms, attempt={}",
+                        operationName, response.statusCode(), duration, attempt
+                    )
 
-                val result = responseHandler(response, response.body())
+                    val httpResult = responseHandler(response, response.body())
 
-                if (result is HttpResponseResult.Error && (response.statusCode() >= 500 || response.statusCode() == HTTP_TOO_MANY_REQUESTS)) {
-                    throw RetriableHttpException(response.statusCode(), "Retriable HTTP error")
+                    if (httpResult is HttpResponseResult.Error && isRetriableStatus(response.statusCode())) {
+                        Failure(java.io.IOException("Retriable HTTP ${response.statusCode()}"))
+                    } else {
+                        Success(httpResult)
+                    }
+                } catch (e: Exception) {
+                    Failure(e)
                 }
-
-                result
             },
             shouldRetry = { exception -> isRetriableException(exception) },
             onRetry = { attempt, exception ->
@@ -253,21 +259,23 @@ public class MavenCentralApiClientImpl(
                 )
             }
         )
-    } catch (e: Exception) {
-        logger.error("HTTP request failed: operation={}", operationName, e)
-        HttpResponseResult.UnexpectedError(cause = e)
+
+        return result.fold(
+            onSuccess = { it },
+            onFailure = { HttpResponseResult.UnexpectedError(cause = it) }
+        )
     }
+
+    private fun isRetriableStatus(statusCode: Int): Boolean =
+        statusCode >= 500 || statusCode == HTTP_TOO_MANY_REQUESTS
 
     private fun isRetriableException(e: Exception): Boolean = when (e) {
         is HttpTimeoutException -> true
         is java.net.ConnectException -> true
         is java.net.SocketTimeoutException -> true
         is java.io.IOException -> true
-        is RetriableHttpException -> true
         else -> false
     }
-
-    private class RetriableHttpException(statusCode: Int, message: String) : Exception("HTTP $statusCode: $message")
 
     private fun parseDeploymentStatus(json: String): DeploymentStatus? = try {
         objectMapper.readValue<DeploymentStatusDto>(json).toModel()
