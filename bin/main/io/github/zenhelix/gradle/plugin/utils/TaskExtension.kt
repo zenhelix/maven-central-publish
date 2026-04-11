@@ -4,8 +4,6 @@ import io.github.zenhelix.gradle.plugin.MavenCentralUploaderPlugin.Companion.MAV
 import io.github.zenhelix.gradle.plugin.extension.MavenCentralUploaderExtension
 import io.github.zenhelix.gradle.plugin.task.CreateChecksumTask
 import io.github.zenhelix.gradle.plugin.task.PublishBundleMavenCentralTask
-import io.github.zenhelix.gradle.plugin.task.PublishSplitBundleMavenCentralTask
-import io.github.zenhelix.gradle.plugin.task.SplitZipDeploymentTask
 import io.github.zenhelix.gradle.plugin.task.ZipDeploymentTask
 import org.gradle.api.Project
 import org.gradle.api.Task
@@ -82,31 +80,14 @@ internal fun Project.registerChecksumTask(
     configuration()
 }
 
-internal fun Project.registerSplitZipAllModulesTask(
-    configuration: SplitZipDeploymentTask.() -> Unit = {}
-): TaskProvider<SplitZipDeploymentTask> = this.tasks.register<SplitZipDeploymentTask>(
-    "zipDeploymentAllModules"
-) {
-    description = "Creates split deployment bundles for all publications across all modules"
-
-    configuration()
-}
-
-internal fun Project.registerPublishSplitAllModulesTask(
+internal fun Project.registerPublishAllModulesTask(
     mavenCentralUploaderExtension: MavenCentralUploaderExtension,
-    configuration: PublishSplitBundleMavenCentralTask.() -> Unit = {}
-): TaskProvider<PublishSplitBundleMavenCentralTask> = this.tasks.register<PublishSplitBundleMavenCentralTask>(
-    "publishAllModulesTo${MAVEN_CENTRAL_PORTAL_NAME.capitalized()}Repository"
+    configuration: PublishBundleMavenCentralTask.() -> Unit = {}
+): TaskProvider<PublishBundleMavenCentralTask> = registerPublishBundleMavenCentralTask(
+    "publishAllModulesTo${MAVEN_CENTRAL_PORTAL_NAME.capitalized()}Repository",
+    mavenCentralUploaderExtension
 ) {
     description = "Publishes all Maven publications from all modules to the $MAVEN_CENTRAL_PORTAL_NAME repository."
-
-    baseUrl.set(mavenCentralUploaderExtension.baseUrl)
-    credentials.set(mavenCentralUploaderExtension.mapCredentials())
-    publishingType.set(mavenCentralUploaderExtension.publishingType.map { it.mapModel() })
-    deploymentName.set(mavenCentralUploaderExtension.deploymentName)
-    maxStatusChecks.set(mavenCentralUploaderExtension.uploader.maxStatusChecks)
-    statusCheckDelay.set(mavenCentralUploaderExtension.uploader.statusCheckDelay)
-
     configuration()
 }
 

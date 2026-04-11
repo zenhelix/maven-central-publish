@@ -14,6 +14,7 @@ import org.gradle.api.GradleException
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.model.ObjectFactory
 import org.gradle.api.provider.Property
+import org.gradle.api.provider.Provider
 import org.gradle.api.publish.plugins.PublishingPlugin.PUBLISH_TASK_GROUP
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputFile
@@ -89,8 +90,15 @@ public abstract class PublishBundleMavenCentralTask @Inject constructor(
     public abstract val statusCheckDelay: Property<Duration>
 
     /**
-     * Creates the API client. Called at execution time (not configuration time)
-     * to avoid configuration cache serialization issues with HttpClient.
+     * Internal provider for the API client.
+     */
+    @get:Internal
+    protected open val apiClient: Provider<MavenCentralApiClient> = baseUrl.map { url ->
+        createApiClient(url)
+    }
+
+    /**
+     * Protected method to create API client - can be overridden for testing
      */
     protected open fun createApiClient(url: String): MavenCentralApiClient {
         return if (url.equals("http://test", ignoreCase = true)) {
@@ -115,7 +123,7 @@ public abstract class PublishBundleMavenCentralTask @Inject constructor(
 
         val bundleFile = zipFile.asFile.get()
         val creds = credentials.get()
-        val client = createApiClient(baseUrl.get())
+        val client = apiClient.get()
         val type = publishingType.orNull
         val name = deploymentName.orNull
         val maxChecks = maxStatusChecks.get()
@@ -131,13 +139,7 @@ public abstract class PublishBundleMavenCentralTask @Inject constructor(
 
                 when (uploadResult) {
                     is HttpResponseResult.Success -> {
-                        val deploymentId = uploadResult.data
-                        try {
-                            waitForDeploymentCompletion(apiClient, creds, deploymentId, type, maxChecks, checkDelay)
-                        } catch (e: Exception) {
-                            tryDropDeployment(apiClient, creds, deploymentId)
-                            throw e
-                        }
+                        waitForDeploymentCompletion(apiClient, creds, uploadResult.data, type, maxChecks, checkDelay)
                     }
 
                     is HttpResponseResult.Error -> {
@@ -238,12 +240,7 @@ public abstract class PublishBundleMavenCentralTask @Inject constructor(
 
                         DeploymentState.IN_PROGRESS -> {
                             if (checkNumber < maxChecks) {
-                                try {
-                                    Thread.sleep(checkDelay.toMillis())
-                                } catch (e: InterruptedException) {
-                                    Thread.currentThread().interrupt()
-                                    throw e
-                                }
+                                Thread.sleep(checkDelay.toMillis())
                             } else {
                                 throw GradleException("Deployment did not complete after $maxChecks status checks. Current status: ${status.deploymentState}. Check Maven Central Portal for current status.")
                             }
@@ -257,32 +254,6 @@ public abstract class PublishBundleMavenCentralTask @Inject constructor(
                     statusResult.cause
                 )
             }
-        }
-    }
-
-    private fun tryDropDeployment(
-        client: MavenCentralApiClient,
-        creds: Credentials,
-        deploymentId: UUID
-    ) {
-        logger.warn("Deployment failed, attempting to drop deployment {}", deploymentId)
-        try {
-            when (val result = client.dropDeployment(creds, deploymentId)) {
-                is HttpResponseResult.Success -> {
-                    logger.lifecycle("Deployment {} dropped successfully", deploymentId)
-                }
-                is HttpResponseResult.Error -> {
-                    logger.warn("Failed to drop deployment {}: HTTP {}, Response: {}", deploymentId, result.httpStatus, result.data)
-                }
-                is HttpResponseResult.UnexpectedError -> {
-                    logger.warn("Failed to drop deployment {}: {}", deploymentId, result.cause.message)
-                }
-            }
-        } catch (e: InterruptedException) {
-            Thread.currentThread().interrupt()
-            logger.warn("Interrupted while dropping deployment {}", deploymentId)
-        } catch (e: Exception) {
-            logger.warn("Failed to drop deployment {}: {}", deploymentId, e.message)
         }
     }
 

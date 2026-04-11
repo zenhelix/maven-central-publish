@@ -35,22 +35,4 @@ class BuildOutputAssert(actual: String) : AbstractStringAssert<BuildOutputAssert
             .isEqualTo(count)
     }
 
-    fun containsUploadingChunkLog(chunkFileName: String): BuildOutputAssert = apply {
-        assertThat(actual)
-            .`as`("Build output should contain uploading chunk log for $chunkFileName")
-            .contains("Uploading chunk")
-            .contains(chunkFileName)
-    }
-
-    fun containsUploadingChunkLogCount(count: Int): BuildOutputAssert = apply {
-        val regex = Regex.escape("Uploading chunk").toRegex()
-        // Each chunk upload produces 2 lines: "Uploading chunk N/T: file..." and "Uploading chunk N/T... OK ..."
-        // Count only lines starting with "Uploading chunk" followed by digits (e.g. "Uploading chunk 1/")
-        val actualCount = "Uploading chunk \\d+/\\d+:".toRegex().findAll(actual).count()
-
-        assertThat(actualCount)
-            .`as`("Build output should contain uploading chunk log exactly $count times")
-            .isEqualTo(count)
-    }
-
 }

@@ -47,11 +47,9 @@ public open class UploaderSettingsExtension @Inject constructor(objects: ObjectF
     public val maxStatusChecks: Property<Int> = objects.property<Int>().convention(DEFAULT_MAX_STATUS_CHECKS)
     public val statusCheckDelay: Property<Duration> =
         objects.property<Duration>().convention(DEFAULT_STATUS_CHECK_DELAY)
-    public val maxBundleSize: Property<Long> = objects.property<Long>().convention(DEFAULT_MAX_BUNDLE_SIZE)
 
     public companion object {
         public const val DEFAULT_MAX_STATUS_CHECKS: Int = 20
         public val DEFAULT_STATUS_CHECK_DELAY: Duration = Duration.ofSeconds(10)
-        public const val DEFAULT_MAX_BUNDLE_SIZE: Long = 256L * 1024L * 1024L // 256 MB
     }
 }

@@ -16,22 +16,17 @@ import test.group
 import test.mavenCentralPortal
 import test.moduleBundleFile
 import test.moduleBundlePath
-import test.moduleSplitBundleFile
-import test.moduleSplitBundlePath
 import test.pom
 import test.settings
 import test.settingsGradleFile
 import test.signing
-import test.splitBundlesDirectory
 import test.testkit.BuildOutputAssert
 import test.testkit.DirectoryAssert
 import test.testkit.GradleDryRunOutputAssert
 import test.testkit.GradleTasksOutputAssert
 import test.testkit.gradleDryRunRunner
-import test.testkit.gradleRunner
 import test.testkit.gradleRunnerDebug
 import test.testkit.gradleTasksRunner
-import org.assertj.core.api.Assertions.assertThat as assertThatString
 import test.utils.ZipFileAssert.Companion.assertThat
 import test.utils.containsMavenArtifacts
 import test.utils.containsSomeMavenArtifacts
@@ -373,11 +368,11 @@ class MavenCentralUploaderPluginFunctionalTest {
             withTask("zipDeploymentAllModules")
         }
 
-        DirectoryAssert.assertThat(testProjectDir.splitBundlesDirectory()).containsExactlyFiles(
-            Path.of("").moduleSplitBundlePath("test-library", version, "allModules").toString()
+        DirectoryAssert.assertThat(testProjectDir.distributionsDirectory()).containsExactlyFiles(
+            Path.of("").moduleBundlePath("test-library", version, "allModules").toString()
         )
         assertThat(
-            ZipFile(testProjectDir.moduleSplitBundleFile("test-library", version, "allModules").toFile())
+            ZipFile(testProjectDir.moduleBundleFile(null, "test-library", version, "allModules").toFile())
         ).containsMavenArtifacts("test.zenhelix", "test-library", version) {
             standardJavaLibrary(module1)
             standardJavaLibrary(module2)
@@ -492,12 +487,12 @@ class MavenCentralUploaderPluginFunctionalTest {
             withTask("zipDeploymentAllModules")
         }
 
-        DirectoryAssert.assertThat(testProjectDir.splitBundlesDirectory()).containsExactlyFiles(
-            Path.of("").moduleSplitBundlePath("test-project", version, "allModules").toString()
+        DirectoryAssert.assertThat(testProjectDir.distributionsDirectory()).containsExactlyFiles(
+            Path.of("").moduleBundlePath("test-project", version, "allModules").toString()
         )
 
         assertThat(
-            ZipFile(testProjectDir.moduleSplitBundleFile("test-project", version, "allModules").toFile())
+            ZipFile(testProjectDir.moduleBundleFile(null, "test-project", version, "allModules").toFile())
         ).containsSomeMavenArtifacts("test.zenhelix", module1, version) {
             standardJavaLibrary()
         }.containsSomeMavenArtifacts("test.zenhelix", "$module1-test-fixtures", version) {
@@ -668,8 +663,8 @@ class MavenCentralUploaderPluginFunctionalTest {
             withTask("zipDeploymentAllModules")
         }
 
-        DirectoryAssert.assertThat(testProjectDir.splitBundlesDirectory()).containsExactlyFiles(
-            Path.of("").moduleSplitBundlePath("my-library", version, "allModules").toString()
+        DirectoryAssert.assertThat(testProjectDir.distributionsDirectory()).containsExactlyFiles(
+            Path.of("").moduleBundlePath("my-library", version, "allModules").toString()
         )
         DirectoryAssert.assertThat(testProjectDir.distributionsDirectory(module1)).doesNotExist()
         DirectoryAssert.assertThat(testProjectDir.distributionsDirectory(module2)).doesNotExist()
@@ -855,177 +850,6 @@ class MavenCentralUploaderPluginFunctionalTest {
     }
 
     @Test
-    fun `subproject-only plugin application should wire publish to maven central tasks`() {
-        val version = "1.0.0"
-        val module1 = "lib-core"
-        val module2 = "lib-api"
-
-        testProjectDir.settingsGradleFile().writeText(settings("test-library", module1, module2))
-
-        // Root does NOT apply the plugin
-        testProjectDir.buildGradleFile().writeText(
-            """
-            ${group(version = version)}
-            """.trimIndent()
-        )
-
-        // Each subproject applies the plugin independently
-        listOf(module1, module2).forEach { module ->
-            testProjectDir.buildGradleFile(module).writeText(
-                """
-                plugins {
-                    `java-library`
-                    id("$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
-                }
-
-                publishing {
-                    repositories {
-                        mavenLocal()
-                        ${mavenCentralPortal()}
-                    }
-                    publications {
-                        create<MavenPublication>("mavenJava") {
-                            from(components["java"])
-                        }
-                    }
-                }
-
-                ${signing()}
-                $pom
-                """.trimIndent()
-            )
-        }
-
-        testProjectDir.createJavaMainClass(module1)
-        testProjectDir.createJavaMainClass(module2)
-
-        // Verify dry-run: each subproject's publish should trigger its Maven Central task
-        val dryRun = gradleDryRunRunner(testProjectDir, "publish")
-
-        GradleDryRunOutputAssert.assertThat(dryRun)
-            .containsTask(":$module1:publishAllPublicationsToMavenCentralPortalRepository")
-            .containsTask(":$module2:publishAllPublicationsToMavenCentralPortalRepository")
-
-        // Verify actual run produces publishing logs
-        val result = gradleRunnerDebug(testProjectDir) {
-            withVersion(version)
-            withTask("publish")
-        }
-
-        BuildOutputAssert.assertThat(result.output)
-            .containsPublishingLogCount(2)
-    }
-
-    @Test
-    fun `aggregation mode should not trigger per-subproject maven central publish`() {
-        val version = "1.0.0"
-        val module1 = "lib-core"
-        val module2 = "lib-api"
-
-        testProjectDir.settingsGradleFile().writeText(settings("test-library", module1, module2))
-
-        // Root DOES apply the plugin (Mode 2)
-        testProjectDir.buildGradleFile().writeText(
-            """
-            plugins {
-                id("$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
-            }
-
-            ${group(version = version)}
-
-            ${mavenCentralPortal()}
-
-            subprojects {
-                apply(plugin = "java-library")
-                apply(plugin = "$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
-
-                publishing {
-                    repositories {
-                        mavenLocal()
-                        ${mavenCentralPortal()}
-                    }
-                    publications {
-                        create<MavenPublication>("mavenJava") {
-                            from(components["java"])
-                        }
-                    }
-                }
-
-                ${signing()}
-                $pom
-            }
-            """.trimIndent()
-        )
-
-        testProjectDir.createJavaMainClass(module1)
-        testProjectDir.createJavaMainClass(module2)
-
-        val result = gradleRunnerDebug(testProjectDir) {
-            withVersion(version)
-            withTask("publish")
-        }
-
-        // Only ONE uploading chunk log: the aggregated bundle, not per-subproject
-        BuildOutputAssert.assertThat(result.output)
-            .containsUploadingChunkLogCount(1)
-            .containsUploadingChunkLog("test-library-allModules-$version-1.zip")
-    }
-
-    @Test
-    fun `should warn when multiple subprojects publish independently without root plugin`() {
-        val version = "1.0.0"
-        val module1 = "lib-core"
-        val module2 = "lib-api"
-
-        testProjectDir.settingsGradleFile().writeText(settings("test-library", module1, module2))
-
-        // Root does NOT apply the plugin
-        testProjectDir.buildGradleFile().writeText(
-            """
-            ${group(version = version)}
-            """.trimIndent()
-        )
-
-        listOf(module1, module2).forEach { module ->
-            testProjectDir.buildGradleFile(module).writeText(
-                """
-                plugins {
-                    `java-library`
-                    id("$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
-                }
-
-                publishing {
-                    repositories {
-                        mavenLocal()
-                        ${mavenCentralPortal()}
-                    }
-                    publications {
-                        create<MavenPublication>("mavenJava") {
-                            from(components["java"])
-                        }
-                    }
-                }
-
-                ${signing()}
-                $pom
-                """.trimIndent()
-            )
-        }
-
-        testProjectDir.createJavaMainClass(module1)
-        testProjectDir.createJavaMainClass(module2)
-
-        val result = gradleRunnerDebug(testProjectDir) {
-            withVersion(version)
-            withTask("publish")
-        }
-
-        assertThatString(result.output).contains(
-            "Multiple projects publish to Maven Central independently"
-        )
-    }
-
-    @Test
     fun `root project with publications and subprojects should publish only aggregated archive`() {
         val version = "2.5.0"
         val module1 = "module-a"
@@ -1106,124 +930,20 @@ class MavenCentralUploaderPluginFunctionalTest {
         }
 
         BuildOutputAssert.assertThat(result.output)
-            .containsUploadingChunkLogCount(1)
-            .containsUploadingChunkLog("bom-library-allModules-$version-1.zip")
+            .containsPublishingLogCount(1)
+            .containsPublishingLog("bom-library-allModules-$version.zip", "AUTOMATIC", null)
 
-        DirectoryAssert.assertThat(testProjectDir.splitBundlesDirectory()).containsExactlyFiles(
-            Path.of("").moduleSplitBundlePath("bom-library", version, "allModules").toString()
+        DirectoryAssert.assertThat(testProjectDir.distributionsDirectory()).containsExactlyFiles(
+            Path.of("").moduleBundlePath("bom-library", version, "allModules").toString()
         )
 
         assertThat(
-            ZipFile(testProjectDir.moduleSplitBundleFile("bom-library", version, "allModules").toFile())
+            ZipFile(testProjectDir.moduleBundleFile(null, "bom-library", version, "allModules").toFile())
         ).containsSomeMavenArtifacts("test.zenhelix", "bom-library", version) {
             gradlePlatform()
         }.containsSomeMavenArtifacts("test.zenhelix", module1, version) {
             standardJavaLibrary()
         }.containsSomeMavenArtifacts("test.zenhelix", module2, version) {
-            standardJavaLibrary()
-        }
-    }
-
-    @Test
-    fun `should be compatible with configuration cache`() {
-        val version = "1.0.0"
-        val moduleName = "cc-test"
-
-        testProjectDir.settingsGradleFile().writeText(settings(moduleName))
-        testProjectDir.buildGradleFile().writeText(
-            """
-            plugins {
-                `java-library`
-                id("$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
-            }
-
-            ${group(version = version)}
-
-            publishing {
-                repositories {
-                    mavenLocal()
-                    ${mavenCentralPortal()}
-                }
-                publications {
-                    create<MavenPublication>("mavenJava") {
-                        from(components["java"])
-                    }
-                }
-            }
-
-            ${signing()}
-            $pom
-            """.trimIndent()
-        )
-        testProjectDir.createJavaMainClass()
-
-        // First run: stores configuration cache entry
-        val firstRun = gradleRunner(testProjectDir) {
-            forwardOutput()
-            withVersion(version)
-            withTask("publish")
-            withArguments("--configuration-cache")
-        }
-        assertThatString(firstRun.output).contains("Configuration cache entry stored")
-
-        // Second run: reuses configuration cache entry
-        val secondRun = gradleRunner(testProjectDir) {
-            forwardOutput()
-            withVersion(version)
-            withTask("publish")
-            withArguments("--configuration-cache")
-        }
-        assertThatString(secondRun.output).contains("Reusing configuration cache")
-    }
-
-    @Test
-    fun `should include artifacts added in late afterEvaluate`() {
-        val version = "1.0.0"
-        val moduleName = "late-lib"
-
-        testProjectDir.settingsGradleFile().writeText(settings(moduleName))
-        //language=kotlin
-        testProjectDir.buildGradleFile().writeText(
-            """
-            plugins {
-                `java-library`
-                id("$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
-            }
-
-            ${group(version = version)}
-
-            publishing {
-                repositories {
-                    mavenLocal()
-                    ${mavenCentralPortal()}
-                }
-            }
-
-            ${signing()}
-            $pom
-
-            // Simulate AGP/KMP pattern: publication created in late afterEvaluate
-            afterEvaluate {
-                publishing {
-                    publications {
-                        create<MavenPublication>("lateLib") {
-                            from(components["java"])
-                        }
-                    }
-                }
-            }
-            """.trimIndent()
-        )
-        testProjectDir.createJavaMainClass()
-
-        gradleRunnerDebug(testProjectDir) {
-            withVersion(version)
-            withTask("zipDeploymentAllPublications")
-        }
-
-        assertThat(
-            ZipFile(testProjectDir.moduleBundleFile(null, moduleName, version, "allPublications").toFile())
-        ).containsMavenArtifacts("test.zenhelix", moduleName, version) {
             standardJavaLibrary()
         }
     }
