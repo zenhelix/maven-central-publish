@@ -7,6 +7,8 @@ import io.github.zenhelix.gradle.plugin.client.model.Credentials
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentStateType
 import io.github.zenhelix.gradle.plugin.client.model.HttpResponseResult
 import io.github.zenhelix.gradle.plugin.client.model.PublishingType
+import io.github.zenhelix.gradle.plugin.client.model.ResultLike
+import io.github.zenhelix.gradle.plugin.client.model.ValidationError
 import java.time.Duration
 import java.util.UUID
 import org.gradle.api.DefaultTask
@@ -72,7 +74,7 @@ public abstract class PublishBundleMavenCentralTask @Inject constructor(
      * Credentials for accessing Maven Central Portal API.
      */
     @get:Input
-    public abstract val credentials: Property<Credentials>
+    public abstract val credentials: Property<ResultLike<Credentials, ValidationError>>
 
     /**
      * Maximum number of status checks for deployment completion.
@@ -108,7 +110,10 @@ public abstract class PublishBundleMavenCentralTask @Inject constructor(
         validateInputs()
 
         val bundleFile = zipFile.asFile.get()
-        val creds = credentials.get()
+        val creds = credentials.get().fold(
+            onSuccess = { it },
+            onFailure = { throw GradleException(it.message) }
+        )
         val client = createApiClient(baseUrl.get())
         val type = publishingType.orNull
         val name = deploymentName.orNull

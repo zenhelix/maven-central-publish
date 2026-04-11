@@ -63,7 +63,7 @@ class PublishSplitBundleDropBehaviorTest {
             testClient = mockClient
             baseUrl.set("https://test.example.com")
             bundlesDirectory.set(bundlesDir)
-            credentials.set(BearerTokenCredentials("test-token"))
+            credentials.set(io.github.zenhelix.gradle.plugin.client.model.Success(BearerTokenCredentials("test-token")))
             publishingType.set(PublishingType.AUTOMATIC)
             maxStatusChecks.set(2)
             statusCheckDelay.set(Duration.ofMillis(1))

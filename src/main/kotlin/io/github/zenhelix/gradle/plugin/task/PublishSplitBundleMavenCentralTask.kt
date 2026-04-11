@@ -7,6 +7,8 @@ import io.github.zenhelix.gradle.plugin.client.model.Credentials
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentStateType
 import io.github.zenhelix.gradle.plugin.client.model.HttpResponseResult
 import io.github.zenhelix.gradle.plugin.client.model.PublishingType
+import io.github.zenhelix.gradle.plugin.client.model.ResultLike
+import io.github.zenhelix.gradle.plugin.client.model.ValidationError
 import java.io.File
 import java.time.Duration
 import java.util.UUID
@@ -42,7 +44,7 @@ public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
     public abstract val deploymentName: Property<String>
 
     @get:Input
-    public abstract val credentials: Property<Credentials>
+    public abstract val credentials: Property<ResultLike<Credentials, ValidationError>>
 
     @get:Input
     public abstract val maxStatusChecks: Property<Int>
@@ -75,7 +77,10 @@ public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
             throw GradleException("No ZIP bundles found in ${bundlesDir.absolutePath}")
         }
 
-        val creds = credentials.get()
+        val creds = credentials.get().fold(
+            onSuccess = { it },
+            onFailure = { throw GradleException(it.message) }
+        )
         val maxChecks = maxStatusChecks.get()
         val checkDelay = statusCheckDelay.get()
         val baseName = deploymentName.orNull

@@ -67,7 +67,7 @@ class PublishBundleDropBehaviorTest {
             testClient = mockClient
             baseUrl.set("https://test.example.com")
             zipFile.set(bundleFile)
-            credentials.set(BearerTokenCredentials("test-token"))
+            credentials.set(io.github.zenhelix.gradle.plugin.client.model.Success(BearerTokenCredentials("test-token")))
             publishingType.set(PublishingType.AUTOMATIC)
             maxStatusChecks.set(2)
             statusCheckDelay.set(Duration.ofMillis(1))
@@ -186,7 +186,7 @@ class PublishBundleDropBehaviorTest {
             testClient = mockClient
             baseUrl.set("https://test.example.com")
             zipFile.set(bundleFile)
-            credentials.set(BearerTokenCredentials("test-token"))
+            credentials.set(io.github.zenhelix.gradle.plugin.client.model.Success(BearerTokenCredentials("test-token")))
             publishingType.set(PublishingType.USER_MANAGED)
             maxStatusChecks.set(2)
             statusCheckDelay.set(Duration.ofMillis(1))
