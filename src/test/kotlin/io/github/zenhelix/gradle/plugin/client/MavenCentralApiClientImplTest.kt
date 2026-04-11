@@ -224,6 +224,63 @@ class MavenCentralApiClientImplTest {
     }
 
     @Test
+    fun `uploadDeploymentBundle should retry on HTTP 429`() {
+        val expectedDeploymentId = UUID.fromString("12345678-1234-1234-1234-123456789012")
+        var callCount = 0
+
+        every {
+            mockHttpClient.send(any<HttpRequest>(), any<BodyHandler<String>>())
+        } answers {
+            callCount++
+            if (callCount == 1) {
+                mockk<HttpResponse<String>> {
+                    every { statusCode() } returns 429
+                    every { body() } returns "Rate limited"
+                    every { headers() } returns mockk { every { map() } returns emptyMap() }
+                }
+            } else {
+                mockk<HttpResponse<String>> {
+                    every { statusCode() } returns 201
+                    every { body() } returns expectedDeploymentId.toString()
+                    every { headers() } returns mockk { every { map() } returns mapOf("Content-Type" to listOf("text/plain")) }
+                }
+            }
+        }
+
+        val result = client.uploadDeploymentBundle(
+            credentials = BearerTokenCredentials(token = "test-token-123"),
+            bundle = createTestBundleFile()
+        )
+
+        assertThat(result).isInstanceOf(HttpResponseResult.Success::class.java)
+        assertThat((result as HttpResponseResult.Success).data).isEqualTo(expectedDeploymentId)
+        assertThat(callCount).isEqualTo(2)
+    }
+
+    @Test
+    fun `uploadDeploymentBundle should escape special characters in filename`() {
+        val capturedRequest = slot<HttpRequest>()
+        val bundleFile = tempDir.resolve("test\"bundle.zip").also {
+            Files.write(it, "test content".toByteArray())
+        }
+
+        every {
+            mockHttpClient.send(capture(capturedRequest), any<BodyHandler<String>>())
+        } returns mockk<HttpResponse<String>> {
+            every { statusCode() } returns 201
+            every { body() } returns UUID.randomUUID().toString()
+            every { headers() } returns mockk { every { map() } returns emptyMap() }
+        }
+
+        client.uploadDeploymentBundle(
+            credentials = BearerTokenCredentials(token = "test-token-123"),
+            bundle = bundleFile
+        )
+
+        verify { mockHttpClient.send(any<HttpRequest>(), any<BodyHandler<String>>()) }
+    }
+
+    @Test
     fun `dropDeployment should use DELETE method`() {
         val capturedRequest = slot<HttpRequest>()
 

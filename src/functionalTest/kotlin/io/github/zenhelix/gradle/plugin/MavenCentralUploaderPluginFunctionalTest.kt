@@ -27,6 +27,7 @@ import test.testkit.GradleTasksOutputAssert
 import test.testkit.gradleDryRunRunner
 import test.testkit.gradleRunnerDebug
 import test.testkit.gradleTasksRunner
+import org.assertj.core.api.Assertions.assertThat as assertThatString
 import test.utils.ZipFileAssert.Companion.assertThat
 import test.utils.containsMavenArtifacts
 import test.utils.containsSomeMavenArtifacts
@@ -850,6 +851,177 @@ class MavenCentralUploaderPluginFunctionalTest {
     }
 
     @Test
+    fun `subproject-only plugin application should wire publish to maven central tasks`() {
+        val version = "1.0.0"
+        val module1 = "lib-core"
+        val module2 = "lib-api"
+
+        testProjectDir.settingsGradleFile().writeText(settings("test-library", module1, module2))
+
+        // Root does NOT apply the plugin
+        testProjectDir.buildGradleFile().writeText(
+            """
+            ${group(version = version)}
+            """.trimIndent()
+        )
+
+        // Each subproject applies the plugin independently
+        listOf(module1, module2).forEach { module ->
+            testProjectDir.buildGradleFile(module).writeText(
+                """
+                plugins {
+                    `java-library`
+                    id("$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
+                }
+
+                publishing {
+                    repositories {
+                        mavenLocal()
+                        ${mavenCentralPortal()}
+                    }
+                    publications {
+                        create<MavenPublication>("mavenJava") {
+                            from(components["java"])
+                        }
+                    }
+                }
+
+                ${signing()}
+                $pom
+                """.trimIndent()
+            )
+        }
+
+        testProjectDir.createJavaMainClass(module1)
+        testProjectDir.createJavaMainClass(module2)
+
+        // Verify dry-run: each subproject's publish should trigger its Maven Central task
+        val dryRun = gradleDryRunRunner(testProjectDir, "publish")
+
+        GradleDryRunOutputAssert.assertThat(dryRun)
+            .containsTask(":$module1:publishAllPublicationsToMavenCentralPortalRepository")
+            .containsTask(":$module2:publishAllPublicationsToMavenCentralPortalRepository")
+
+        // Verify actual run produces publishing logs
+        val result = gradleRunnerDebug(testProjectDir) {
+            withVersion(version)
+            withTask("publish")
+        }
+
+        BuildOutputAssert.assertThat(result.output)
+            .containsPublishingLogCount(2)
+    }
+
+    @Test
+    fun `aggregation mode should not trigger per-subproject maven central publish`() {
+        val version = "1.0.0"
+        val module1 = "lib-core"
+        val module2 = "lib-api"
+
+        testProjectDir.settingsGradleFile().writeText(settings("test-library", module1, module2))
+
+        // Root DOES apply the plugin (Mode 2)
+        testProjectDir.buildGradleFile().writeText(
+            """
+            plugins {
+                id("$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
+            }
+
+            ${group(version = version)}
+
+            ${mavenCentralPortal()}
+
+            subprojects {
+                apply(plugin = "java-library")
+                apply(plugin = "$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
+
+                publishing {
+                    repositories {
+                        mavenLocal()
+                        ${mavenCentralPortal()}
+                    }
+                    publications {
+                        create<MavenPublication>("mavenJava") {
+                            from(components["java"])
+                        }
+                    }
+                }
+
+                ${signing()}
+                $pom
+            }
+            """.trimIndent()
+        )
+
+        testProjectDir.createJavaMainClass(module1)
+        testProjectDir.createJavaMainClass(module2)
+
+        val result = gradleRunnerDebug(testProjectDir) {
+            withVersion(version)
+            withTask("publish")
+        }
+
+        // Only ONE publishing log: the aggregated bundle, not per-subproject
+        BuildOutputAssert.assertThat(result.output)
+            .containsPublishingLogCount(1)
+            .containsPublishingLog("test-library-allModules-$version.zip", "AUTOMATIC", null)
+    }
+
+    @Test
+    fun `should warn when multiple subprojects publish independently without root plugin`() {
+        val version = "1.0.0"
+        val module1 = "lib-core"
+        val module2 = "lib-api"
+
+        testProjectDir.settingsGradleFile().writeText(settings("test-library", module1, module2))
+
+        // Root does NOT apply the plugin
+        testProjectDir.buildGradleFile().writeText(
+            """
+            ${group(version = version)}
+            """.trimIndent()
+        )
+
+        listOf(module1, module2).forEach { module ->
+            testProjectDir.buildGradleFile(module).writeText(
+                """
+                plugins {
+                    `java-library`
+                    id("$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
+                }
+
+                publishing {
+                    repositories {
+                        mavenLocal()
+                        ${mavenCentralPortal()}
+                    }
+                    publications {
+                        create<MavenPublication>("mavenJava") {
+                            from(components["java"])
+                        }
+                    }
+                }
+
+                ${signing()}
+                $pom
+                """.trimIndent()
+            )
+        }
+
+        testProjectDir.createJavaMainClass(module1)
+        testProjectDir.createJavaMainClass(module2)
+
+        val result = gradleRunnerDebug(testProjectDir) {
+            withVersion(version)
+            withTask("publish")
+        }
+
+        assertThatString(result.output).contains(
+            "Multiple projects publish to Maven Central independently"
+        )
+    }
+
+    @Test
     fun `root project with publications and subprojects should publish only aggregated archive`() {
         val version = "2.5.0"
         val module1 = "module-a"
@@ -944,6 +1116,58 @@ class MavenCentralUploaderPluginFunctionalTest {
         }.containsSomeMavenArtifacts("test.zenhelix", module1, version) {
             standardJavaLibrary()
         }.containsSomeMavenArtifacts("test.zenhelix", module2, version) {
+            standardJavaLibrary()
+        }
+    }
+
+    @Test
+    fun `should include artifacts added in late afterEvaluate`() {
+        val version = "1.0.0"
+        val moduleName = "late-lib"
+
+        testProjectDir.settingsGradleFile().writeText(settings(moduleName))
+        //language=kotlin
+        testProjectDir.buildGradleFile().writeText(
+            """
+            plugins {
+                `java-library`
+                id("$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
+            }
+
+            ${group(version = version)}
+
+            publishing {
+                repositories {
+                    mavenLocal()
+                    ${mavenCentralPortal()}
+                }
+            }
+
+            ${signing()}
+            $pom
+
+            // Simulate AGP/KMP pattern: publication created in late afterEvaluate
+            afterEvaluate {
+                publishing {
+                    publications {
+                        create<MavenPublication>("lateLib") {
+                            from(components["java"])
+                        }
+                    }
+                }
+            }
+            """.trimIndent()
+        )
+        testProjectDir.createJavaMainClass()
+
+        gradleRunnerDebug(testProjectDir) {
+            withVersion(version)
+            withTask("zipDeploymentAllPublications")
+        }
+
+        assertThat(
+            ZipFile(testProjectDir.moduleBundleFile(null, moduleName, version, "allPublications").toFile())
+        ).containsMavenArtifacts("test.zenhelix", moduleName, version) {
             standardJavaLibrary()
         }
     }

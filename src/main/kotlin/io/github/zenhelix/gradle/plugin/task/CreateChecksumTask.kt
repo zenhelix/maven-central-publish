@@ -66,7 +66,6 @@ public abstract class CreateChecksumTask : DefaultTask() {
     public val checksumFiles: ListProperty<RegularFile> = project.objects.listProperty<RegularFile>().apply {
         set(artifactInfos.zip(outputDirectory) { artifacts, outDir ->
             artifacts
-                .filter { artifact -> artifact.file().exists() }
                 .flatMap { artifact ->
                     CHECKSUM_ALGORITHMS.map { hashFunction ->
                         val artifactFile = artifact.file()
@@ -97,7 +96,6 @@ public abstract class CreateChecksumTask : DefaultTask() {
         }
 
         artifacts
-            .filter { artifact -> artifact.file().exists() }
             .forEach { artifact ->
                 CHECKSUM_ALGORITHMS.forEach { hashFunction ->
                     val checksumFile = getChecksumFile(artifact, hashFunction)

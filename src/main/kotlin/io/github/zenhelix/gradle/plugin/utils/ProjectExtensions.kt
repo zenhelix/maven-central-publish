@@ -1,5 +1,6 @@
 package io.github.zenhelix.gradle.plugin.utils
 
+import io.github.zenhelix.gradle.plugin.extension.MavenCentralUploaderExtension
 import org.gradle.api.NamedDomainObjectCollection
 import org.gradle.api.NamedDomainObjectProvider
 import org.gradle.api.Project
@@ -22,3 +23,6 @@ internal fun Project.findMavenPublications(): NamedDomainObjectCollection<MavenP
     this.extensions.findByType<PublishingExtension>()?.publications?.withType<MavenPublicationInternal>()
 
 internal fun Project.findPublishLifecycleTask(): TaskProvider<Task> = this.tasks.named(PUBLISH_LIFECYCLE_TASK_NAME)
+
+internal fun Project.hasMavenCentralPortalExtension(): Boolean =
+    this.extensions.findByType<MavenCentralUploaderExtension>() != null

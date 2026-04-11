@@ -35,7 +35,7 @@ class ZipDeploymentTaskTest {
 
         val zipTask = project.registerZipTask("functionalTest") {
             publications.addAll(publicationInfos)
-            configureContent()
+            publications.get().forEach { configureContentFor(it) }
         }.get()
 
         zipTask.run()
@@ -78,7 +78,7 @@ class ZipDeploymentTaskTest {
 
         val zipTask = project.registerZipTask("multiGavTest") {
             publications.addAll(publicationInfos)
-            configureContent()
+            publications.get().forEach { configureContentFor(it) }
         }.get()
 
         zipTask.run()

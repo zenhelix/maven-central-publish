@@ -10,6 +10,9 @@ import java.util.UUID
 
 public class MavenCentralApiClientDumbImpl : MavenCentralApiClient {
 
+    public var dropDeploymentCallCount: Int = 0
+        private set
+
     override fun uploadDeploymentBundle(
         credentials: Credentials, bundle: Path, publishingType: PublishingType?, deploymentName: String?
     ): HttpResponseResult<UUID, String> = HttpResponseResult.Success(UUID.randomUUID())
@@ -31,7 +34,10 @@ public class MavenCentralApiClientDumbImpl : MavenCentralApiClient {
 
     override fun dropDeployment(
         credentials: Credentials, deploymentId: UUID
-    ): HttpResponseResult<Unit, String> = HttpResponseResult.Success(Unit)
+    ): HttpResponseResult<Unit, String> {
+        dropDeploymentCallCount++
+        return HttpResponseResult.Success(Unit)
+    }
 
     override fun close() {
         // No resources to close in dummy implementation

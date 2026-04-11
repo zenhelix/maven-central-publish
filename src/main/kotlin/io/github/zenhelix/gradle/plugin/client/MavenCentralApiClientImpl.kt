@@ -201,9 +201,15 @@ public class MavenCentralApiClientImpl(
         }
     }
 
+    /**
+     * Closes the underlying HTTP client.
+     *
+     * On Java 21+, [HttpClient] implements [AutoCloseable] and connection pools
+     * are properly shut down. On Java 17-20, [HttpClient] does not implement
+     * [AutoCloseable] — connections are managed by the JVM's internal pool
+     * and cleaned up on GC. No explicit close is needed on these versions.
+     */
     override fun close() {
-        // HttpClient implements AutoCloseable starting from Java 21
-        // For Java 17 and earlier, close() method doesn't exist
         @Suppress("USELESS_IS_CHECK")
         if (httpClient is AutoCloseable) {
             try {
@@ -233,8 +239,8 @@ public class MavenCentralApiClientImpl(
 
                 val result = responseHandler(response, response.body())
 
-                if (result is HttpResponseResult.Error && response.statusCode() >= 500) {
-                    throw RetriableHttpException(response.statusCode(), "Server error")
+                if (result is HttpResponseResult.Error && (response.statusCode() >= 500 || response.statusCode() == HTTP_TOO_MANY_REQUESTS)) {
+                    throw RetriableHttpException(response.statusCode(), "Retriable HTTP error")
                 }
 
                 result
@@ -313,21 +319,28 @@ public class MavenCentralApiClientImpl(
         private const val HTTP_OK = 200
         private const val HTTP_CREATED = 201
         private const val HTTP_NO_CONTENT = 204
+        private const val HTTP_TOO_MANY_REQUESTS = 429
 
         private fun filePart(
             partName: String, boundary: String, file: Path
-        ): HttpRequest.BodyPublisher = BodyPublishers.concat(
-            BodyPublishers.ofString(
-                buildString {
-                    append(CRLF).append("--$boundary").append(CRLF)
-                    append("Content-Disposition: form-data; name=\"$partName\"; filename=\"")
-                    append(file.fileName.toString()).append("\"").append(CRLF)
-                    append("Content-Type: application/octet-stream").append(CRLF)
-                    append(CRLF)
-                }
-            ),
-            BodyPublishers.ofFile(file),
-            BodyPublishers.ofString("$CRLF--$boundary--")
-        )
+        ): HttpRequest.BodyPublisher {
+            val sanitizedFilename = file.fileName.toString()
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+
+            return BodyPublishers.concat(
+                BodyPublishers.ofString(
+                    buildString {
+                        append(CRLF).append("--$boundary").append(CRLF)
+                        append("Content-Disposition: form-data; name=\"$partName\"; filename=\"")
+                        append(sanitizedFilename).append("\"").append(CRLF)
+                        append("Content-Type: application/octet-stream").append(CRLF)
+                        append(CRLF)
+                    }
+                ),
+                BodyPublishers.ofFile(file),
+                BodyPublishers.ofString("$CRLF--$boundary--")
+            )
+        }
     }
 }
