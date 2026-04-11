@@ -3,6 +3,8 @@ package io.github.zenhelix.gradle.plugin.task
 import io.github.zenhelix.gradle.plugin.utils.BundleChunker
 import io.github.zenhelix.gradle.plugin.utils.Chunk
 import io.github.zenhelix.gradle.plugin.utils.ModuleSize
+import io.github.zenhelix.gradle.plugin.utils.toDisplayKB
+import io.github.zenhelix.gradle.plugin.utils.toDisplayMB
 import java.io.File
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -66,28 +68,22 @@ public abstract class SplitZipDeploymentTask : DefaultTask() {
         if (chunks.size > 1) {
             val chunkDescriptions = chunks.mapIndexed { index, chunk ->
                 val modulesStr = chunk.moduleNames.joinToString(", ")
-                "chunk-${index + 1}: ${chunk.totalSize / (1024 * 1024)}MB (modules: $modulesStr)"
+                "chunk-${index + 1}: ${chunk.totalSize.toDisplayMB()}MB (modules: $modulesStr)"
             }
             logger.lifecycle("Bundle split into ${chunks.size} chunks: [${chunkDescriptions.joinToString(", ")}]")
         }
 
+        val baseName = archiveBaseName.get()
         chunks.forEachIndexed { index, chunk ->
-            val zipFile = File(outputDir, "${archiveBaseName.get()}-${index + 1}.zip")
+            val zipFile = File(outputDir, "$baseName-${index + 1}.zip")
             createZipForChunk(zipFile, chunk, modulePublications)
-            logger.lifecycle("Created bundle: ${zipFile.name} (${zipFile.length() / 1024}KB)")
+            logger.lifecycle("Created bundle: ${zipFile.name} (${zipFile.length().toDisplayKB()}KB)")
         }
     }
 
-    private fun calculatePublicationSize(publication: PublicationInfo): Long {
-        var size = 0L
-        publication.artifacts.get().forEach { artifact ->
-            size += artifact.file().length()
-        }
-        publication.checksumFiles?.get()?.forEach { checksumFile ->
-            size += checksumFile.asFile.length()
-        }
-        return size
-    }
+    private fun calculatePublicationSize(publication: PublicationInfo): Long =
+        publication.artifacts.get().sumOf { it.file().length() } +
+                (publication.checksumFiles?.get()?.sumOf { it.asFile.length() } ?: 0L)
 
     private fun createZipForChunk(
         zipFile: File,
@@ -96,7 +92,7 @@ public abstract class SplitZipDeploymentTask : DefaultTask() {
     ) {
         val addedEntries = mutableSetOf<String>()
 
-        ZipOutputStream(zipFile.outputStream().buffered()).use { zos ->
+        ZipOutputStream(zipFile.outputStream()).use { zos ->
             for (moduleName in chunk.moduleNames) {
                 val pubs = modulePublications[moduleName] ?: continue
                 for (pub in pubs) {

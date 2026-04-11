@@ -18,11 +18,9 @@ public class BundleSizeExceededException(
     public val moduleSize: Long,
     public val maxSize: Long
 ) : RuntimeException(
-    "Module '$moduleName' artifacts size ($moduleSize bytes / ${moduleSize.toMB()} MB) exceeds maxBundleSize ($maxSize bytes / ${maxSize.toMB()} MB). " +
+    "Module '$moduleName' artifacts size ($moduleSize bytes / ${moduleSize.toDisplayMB()} MB) exceeds maxBundleSize ($maxSize bytes / ${maxSize.toDisplayMB()} MB). " +
             "Reduce artifact size or increase maxBundleSize."
 )
-
-private fun Long.toMB(): Long = this / (1024 * 1024)
 
 /**
  * Groups modules into chunks using first-fit decreasing bin-packing.
@@ -56,7 +54,7 @@ public object BundleChunker {
             }
         }
 
-        return chunks.map { Chunk(moduleNames = it.moduleNames.toList(), totalSize = it.totalSize) }
+        return chunks.map { Chunk(moduleNames = it.moduleNames, totalSize = it.totalSize) }
     }
 
     private class MutableChunk {

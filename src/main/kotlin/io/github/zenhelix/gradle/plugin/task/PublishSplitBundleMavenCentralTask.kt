@@ -13,7 +13,6 @@ import java.util.UUID
 import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
 import org.gradle.api.file.DirectoryProperty
-import org.gradle.api.model.ObjectFactory
 import org.gradle.api.provider.Property
 import org.gradle.api.publish.plugins.PublishingPlugin.PUBLISH_TASK_GROUP
 import org.gradle.api.tasks.Input
@@ -23,12 +22,9 @@ import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.TaskAction
 import org.gradle.work.DisableCachingByDefault
-import javax.inject.Inject
 
 @DisableCachingByDefault(because = "Not worth caching - publishes to external service")
-public abstract class PublishSplitBundleMavenCentralTask @Inject constructor(
-    private val objects: ObjectFactory
-) : DefaultTask() {
+public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
 
     @get:Input
     public abstract val baseUrl: Property<String>
@@ -75,13 +71,14 @@ public abstract class PublishSplitBundleMavenCentralTask @Inject constructor(
     public fun publishBundles() {
         validateInputs()
 
-        val bundleFiles = bundlesDirectory.asFile.get()
+        val bundlesDir = bundlesDirectory.asFile.get()
+        val bundleFiles = bundlesDir
             .listFiles { f -> f.extension == "zip" }
             ?.sortedBy { it.name }
-            ?: throw GradleException("No ZIP bundles found in ${bundlesDirectory.asFile.get().absolutePath}")
+            .orEmpty()
 
         if (bundleFiles.isEmpty()) {
-            throw GradleException("No ZIP bundles found in ${bundlesDirectory.asFile.get().absolutePath}")
+            throw GradleException("No ZIP bundles found in ${bundlesDir.absolutePath}")
         }
 
         val creds = credentials.get()
@@ -90,8 +87,7 @@ public abstract class PublishSplitBundleMavenCentralTask @Inject constructor(
         val baseName = deploymentName.orNull
 
         val requestedType = publishingType.orNull
-        val isSplit = bundleFiles.size > 1
-        val effectiveType = if (isSplit && requestedType == PublishingType.AUTOMATIC) {
+        val effectiveType = if (bundleFiles.size > 1 && requestedType == PublishingType.AUTOMATIC) {
             logger.lifecycle(
                 "Bundle was split into ${bundleFiles.size} chunks. " +
                         "Switching to USER_MANAGED mode for atomic deployment. " +
@@ -109,7 +105,7 @@ public abstract class PublishSplitBundleMavenCentralTask @Inject constructor(
                 try {
                     waitForAllDeploymentsValidated(client, creds, deploymentIds, effectiveType, maxChecks, checkDelay)
 
-                    if (isSplit && requestedType == PublishingType.AUTOMATIC) {
+                    if (effectiveType != requestedType) {
                         publishAllDeployments(client, creds, deploymentIds)
                     }
                 } catch (e: Exception) {
@@ -133,9 +129,9 @@ public abstract class PublishSplitBundleMavenCentralTask @Inject constructor(
     ): List<UUID> {
         val deploymentIds = mutableListOf<UUID>()
 
+        val totalChunks = bundleFiles.size
         bundleFiles.forEachIndexed { index, bundleFile ->
             val chunkNumber = index + 1
-            val totalChunks = bundleFiles.size
             val chunkName = if (baseName != null) "$baseName-chunk-$chunkNumber" else null
 
             logger.lifecycle("Uploading chunk $chunkNumber/$totalChunks: ${bundleFile.name}...")
@@ -261,7 +257,7 @@ public abstract class PublishSplitBundleMavenCentralTask @Inject constructor(
     ) {
         logger.lifecycle("Publishing all ${deploymentIds.size} deployment(s)...")
 
-        val publishedIds = mutableListOf<UUID>()
+        val publishedIds = mutableSetOf<UUID>()
 
         for (deploymentId in deploymentIds) {
             when (val result = client.publishDeployment(creds, deploymentId)) {
@@ -271,32 +267,38 @@ public abstract class PublishSplitBundleMavenCentralTask @Inject constructor(
                 }
 
                 is HttpResponseResult.Error -> {
-                    val unpublished = deploymentIds.filter { it !in publishedIds && it != deploymentId }
-                    dropAllDeployments(client, creds, unpublished)
-
-                    throw GradleException(
-                        "Failed to publish deployment $deploymentId: HTTP ${result.httpStatus}. " +
-                                "WARNING: ${publishedIds.size} deployment(s) may already be published " +
-                                "and cannot be rolled back (API limitation). " +
-                                "Dropped ${unpublished.size} remaining unpublished deployment(s)."
-                    )
+                    handlePublishFailure(client, creds, deploymentIds, publishedIds, deploymentId,
+                        "Failed to publish deployment $deploymentId: HTTP ${result.httpStatus}.", null)
                 }
 
                 is HttpResponseResult.UnexpectedError -> {
-                    val unpublished = deploymentIds.filter { it !in publishedIds && it != deploymentId }
-                    dropAllDeployments(client, creds, unpublished)
-
-                    throw GradleException(
-                        "Unexpected error publishing deployment $deploymentId. " +
-                                "WARNING: ${publishedIds.size} deployment(s) may already be published. " +
-                                "Dropped ${unpublished.size} remaining unpublished deployment(s).",
-                        result.cause
-                    )
+                    handlePublishFailure(client, creds, deploymentIds, publishedIds, deploymentId,
+                        "Unexpected error publishing deployment $deploymentId.", result.cause)
                 }
             }
         }
 
         logger.lifecycle("Published successfully.")
+    }
+
+    private fun handlePublishFailure(
+        client: MavenCentralApiClient,
+        creds: Credentials,
+        deploymentIds: List<UUID>,
+        publishedIds: Set<UUID>,
+        failedId: UUID,
+        message: String,
+        cause: Exception?
+    ): Nothing {
+        val unpublished = deploymentIds.filter { it !in publishedIds && it != failedId }
+        dropAllDeployments(client, creds, unpublished)
+
+        throw GradleException(
+            "$message WARNING: ${publishedIds.size} deployment(s) may already be published " +
+                    "and cannot be rolled back (API limitation). " +
+                    "Dropped ${unpublished.size} remaining unpublished deployment(s).",
+            cause
+        )
     }
 
     private fun dropAllDeployments(
