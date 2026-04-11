@@ -61,7 +61,12 @@ public class RetryHandler(
                 val delayMillis = calculateBackoffDelay(attempt)
                 logger.debug("Retrying after ${delayMillis}ms (attempt $attempt/$maxRetries): ${e.message}")
 
-                Thread.sleep(delayMillis)
+                try {
+                    Thread.sleep(delayMillis)
+                } catch (e: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    throw e
+                }
             }
 
             attempt++
