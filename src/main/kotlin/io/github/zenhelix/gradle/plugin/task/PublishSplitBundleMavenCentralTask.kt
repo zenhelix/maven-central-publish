@@ -1,9 +1,7 @@
 package io.github.zenhelix.gradle.plugin.task
 
 import io.github.zenhelix.gradle.plugin.client.MavenCentralApiClient
-import io.github.zenhelix.gradle.plugin.client.MavenCentralApiClientDumbImpl
-import io.github.zenhelix.gradle.plugin.client.MavenCentralApiClientImpl
-import io.github.zenhelix.gradle.plugin.client.TEST_BASE_URL
+import io.github.zenhelix.gradle.plugin.client.createApiClient as createDefaultApiClient
 import io.github.zenhelix.gradle.plugin.client.model.Credentials
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentStateType
 import io.github.zenhelix.gradle.plugin.client.model.HttpResponseResult
@@ -51,13 +49,7 @@ public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
     @get:Input
     public abstract val statusCheckDelay: Property<Duration>
 
-    protected open fun createApiClient(url: String): MavenCentralApiClient {
-        return if (url == TEST_BASE_URL) {
-            MavenCentralApiClientDumbImpl()
-        } else {
-            MavenCentralApiClientImpl(url)
-        }
-    }
+    protected open fun createApiClient(url: String): MavenCentralApiClient = createDefaultApiClient(url)
 
     init {
         group = PUBLISH_TASK_GROUP

@@ -48,3 +48,11 @@ internal class MavenCentralApiClientDumbImpl : MavenCentralApiClient {
  * Used exclusively in functional tests to avoid real HTTP calls.
  */
 internal const val TEST_BASE_URL: String = "https://test.invalid"
+
+/**
+ * Creates an [MavenCentralApiClient] for the given [url].
+ * Returns [MavenCentralApiClientDumbImpl] when [url] matches [TEST_BASE_URL],
+ * otherwise creates a real [MavenCentralApiClientImpl].
+ */
+internal fun createApiClient(url: String): MavenCentralApiClient =
+    if (url == TEST_BASE_URL) MavenCentralApiClientDumbImpl() else MavenCentralApiClientImpl(url)

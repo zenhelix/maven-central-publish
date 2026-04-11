@@ -109,28 +109,27 @@ allprojects {
 """.trimIndent()
 
 
-internal fun mavenCentralPortal() = """
+private fun mavenCentralPortal(credentialsBlock: String) = """
 mavenCentralPortal {
     baseUrl = "https://test.invalid"
     credentials {
-        usernamePassword {
-            username = "stub"
-            password = "stub"
-        }
+        $credentialsBlock
     }
 }
 """.trimIndent()
 
-internal fun mavenCentralPortalBearer() = """
-mavenCentralPortal {
-    baseUrl = "https://test.invalid"
-    credentials {
+internal fun mavenCentralPortal() = mavenCentralPortal("""
+        usernamePassword {
+            username = "stub"
+            password = "stub"
+        }
+""".trimIndent())
+
+internal fun mavenCentralPortalBearer() = mavenCentralPortal("""
         bearer {
             token = "stub-bearer-token"
         }
-    }
-}
-""".trimIndent()
+""".trimIndent())
 
 internal fun File.moduleBundleFile(
     gradleModuleName: String? = null, moduleName: String, version: String,
