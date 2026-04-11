@@ -24,8 +24,11 @@ Plugin applies `maven-publish` and `signing` plugins automatically, then extends
 * Packages artifacts, signatures, and checksums into deployment bundles (ZIP)
 * Uploads bundles via Publisher API
 * Polls deployment status until completion
+* Automatically drops deployment on failure or timeout
+* Retries on HTTP 429 (Too Many Requests) with exponential backoff
 
 Supports both single-module and multi-module projects with automatic aggregation.
+Works with late-configured publications (Kotlin Multiplatform, Android Gradle Plugin) that register publications in `afterEvaluate`.
 
 == Configuration
 
@@ -49,6 +52,10 @@ mavenCentralPortal {
 [cols="1,3"]
 |===
 |Property |Description
+
+|`baseUrl`
+|Maven Central Portal API base URL +
+Default: `https://central.sonatype.com`
 
 |`credentials.username`
 |Maven Central username or token username
