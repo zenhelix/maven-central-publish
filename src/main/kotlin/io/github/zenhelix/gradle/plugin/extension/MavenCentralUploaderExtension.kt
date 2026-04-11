@@ -36,8 +36,11 @@ public open class MavenCentralUploaderExtension @Inject constructor(objects: Obj
     }
 }
 
-public open class MavenCentralUploaderCredentialExtension @Inject constructor(private val objects: ObjectFactory) {
+public open class MavenCentralUploaderCredentialExtension @Inject constructor(objects: ObjectFactory) {
 
+    // Tracks whether each block was entered (not whether properties are set).
+    // This allows better error messages: `bearer { }` without token.set() reports
+    // "Bearer token is not set" rather than the generic "No credentials configured".
     private var bearerConfigured: Boolean = false
     private var usernamePasswordConfigured: Boolean = false
 

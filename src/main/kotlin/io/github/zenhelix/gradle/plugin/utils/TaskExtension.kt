@@ -101,7 +101,7 @@ internal fun Project.registerPublishSplitAllModulesTask(
     description = "Publishes all Maven publications from all modules to the $MAVEN_CENTRAL_PORTAL_NAME repository."
 
     baseUrl.set(mavenCentralUploaderExtension.baseUrl)
-    credentials.set(mavenCentralUploaderExtension.mapCredentials())
+    credentials.set(this@registerPublishSplitAllModulesTask.mapCredentials(mavenCentralUploaderExtension))
     publishingType.set(mavenCentralUploaderExtension.publishingType.map { it.mapModel() })
     deploymentName.set(mavenCentralUploaderExtension.deploymentName)
     maxStatusChecks.set(mavenCentralUploaderExtension.uploader.maxStatusChecks)
@@ -116,7 +116,7 @@ private fun Project.registerPublishBundleMavenCentralTask(
     configuration: PublishBundleMavenCentralTask.() -> Unit = {}
 ): TaskProvider<PublishBundleMavenCentralTask> = this.tasks.register<PublishBundleMavenCentralTask>(name) {
     baseUrl.set(mavenCentralUploaderExtension.baseUrl)
-    credentials.set(mavenCentralUploaderExtension.mapCredentials())
+    credentials.set(this@registerPublishBundleMavenCentralTask.mapCredentials(mavenCentralUploaderExtension))
     publishingType.set(mavenCentralUploaderExtension.publishingType.map { it.mapModel() })
     deploymentName.set(mavenCentralUploaderExtension.deploymentName)
     maxStatusChecks.set(mavenCentralUploaderExtension.uploader.maxStatusChecks)
