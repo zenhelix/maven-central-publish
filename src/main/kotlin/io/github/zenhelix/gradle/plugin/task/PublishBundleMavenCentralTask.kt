@@ -1,7 +1,6 @@
 package io.github.zenhelix.gradle.plugin.task
 
 import io.github.zenhelix.gradle.plugin.client.MavenCentralApiClient
-import io.github.zenhelix.gradle.plugin.client.MavenCentralApiClientDumbImpl
 import io.github.zenhelix.gradle.plugin.client.MavenCentralApiClientImpl
 import io.github.zenhelix.gradle.plugin.client.model.Credentials
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentStateType
@@ -93,11 +92,7 @@ public abstract class PublishBundleMavenCentralTask @Inject constructor(
      * to avoid configuration cache serialization issues with HttpClient.
      */
     protected open fun createApiClient(url: String): MavenCentralApiClient {
-        return if (url.equals("http://test", ignoreCase = true)) {
-            MavenCentralApiClientDumbImpl()
-        } else {
-            MavenCentralApiClientImpl(url)
-        }
+        return MavenCentralApiClientImpl(url)
     }
 
     init {
