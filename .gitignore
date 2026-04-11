@@ -51,3 +51,8 @@ local.properties
 hs_err_pid*
 replay_pid*
 
+### macOS template
+# General
+.DS_Store
+.AppleDouble
+.LSOverride
