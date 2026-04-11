@@ -11,8 +11,9 @@ import io.github.zenhelix.gradle.plugin.utils.hasMavenCentralPortalExtension
 import io.github.zenhelix.gradle.plugin.utils.mapModel
 import io.github.zenhelix.gradle.plugin.utils.registerChecksumTask
 import io.github.zenhelix.gradle.plugin.utils.registerChecksumsAllPublicationsTask
-import io.github.zenhelix.gradle.plugin.utils.registerPublishAllModulesTask
 import io.github.zenhelix.gradle.plugin.utils.registerPublishAllPublicationsTask
+import io.github.zenhelix.gradle.plugin.utils.registerPublishSplitAllModulesTask
+import io.github.zenhelix.gradle.plugin.utils.registerSplitZipAllModulesTask
 import io.github.zenhelix.gradle.plugin.utils.registerPublishPublicationTask
 import io.github.zenhelix.gradle.plugin.utils.registerZipAllPublicationsTask
 import io.github.zenhelix.gradle.plugin.utils.registerZipPublicationTask
@@ -249,25 +250,23 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
         }
 
         if (allPublicationsInfo.isNotEmpty()) {
-            val aggregatedZipTask = rootProject.tasks.register<ZipDeploymentTask>(
-                "zipDeploymentAllModules"
-            ) {
-                description = "Creates deployment bundle for all publications across all modules"
-
+            val splitZipTask = rootProject.registerSplitZipAllModulesTask {
                 dependsOn(allChecksumsAndBuildTasks)
 
                 this.publications.addAll(allPublicationsInfo)
 
-                allPublicationsInfo.forEach { configureContentFor(it) }
-
-                archiveFileName.set(rootProject.provider {
-                    "${rootProject.name}-allModules-${rootProject.version}.zip"
+                maxBundleSize.set(extension.uploader.maxBundleSize)
+                archiveBaseName.set(rootProject.provider {
+                    "${rootProject.name}-allModules-${rootProject.version}"
                 })
+                outputDirectory.set(
+                    rootProject.layout.buildDirectory.dir("maven-central-split-bundles")
+                )
             }
 
-            rootProject.registerPublishAllModulesTask(extension) {
-                dependsOn(aggregatedZipTask)
-                zipFile.set(aggregatedZipTask.flatMap { it.archiveFile })
+            rootProject.registerPublishSplitAllModulesTask(extension) {
+                dependsOn(splitZipTask)
+                bundlesDirectory.set(splitZipTask.flatMap { it.outputDirectory })
             }
         }
     }
