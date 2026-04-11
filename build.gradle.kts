@@ -18,10 +18,11 @@ repositories {
     gradlePluginPortal()
 }
 
-val jdkVersion = JavaVersion.VERSION_17
+val jdkVersion = 17
 java {
-    sourceCompatibility = jdkVersion
-    targetCompatibility = jdkVersion
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(jdkVersion)
+    }
 
     withJavadocJar()
     withSourcesJar()
