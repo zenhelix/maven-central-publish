@@ -128,8 +128,15 @@ public abstract class PublishBundleMavenCentralTask @Inject constructor(
                         val deploymentId = uploadResult.data
                         try {
                             waitForDeploymentCompletion(apiClient, creds, deploymentId, type, maxChecks, checkDelay)
-                        } catch (e: Exception) {
-                            tryDropDeployment(apiClient, creds, deploymentId)
+                        } catch (e: DeploymentFailedException) {
+                            if (e.lastState.isDroppable) {
+                                tryDropDeployment(apiClient, creds, deploymentId)
+                            } else {
+                                logger.warn(
+                                    "Deployment {} is in {} state and cannot be dropped. Check Maven Central Portal for current status.",
+                                    deploymentId, e.lastState
+                                )
+                            }
                             throw e
                         }
                     }
@@ -188,7 +195,8 @@ public abstract class PublishBundleMavenCentralTask @Inject constructor(
      * - UNKNOWN is treated as FAILED
      *
      * If the deployment does not reach a terminal state within [maxChecks] polls,
-     * a [GradleException] is thrown and the caller is responsible for dropping the deployment.
+     * a [DeploymentFailedException] is thrown. The caller checks [DeploymentStateType.isDroppable]
+     * to decide whether to attempt dropping — deployments in PUBLISHING state cannot be dropped.
      */
     private fun waitForDeploymentCompletion(
         client: MavenCentralApiClient,
@@ -230,12 +238,15 @@ public abstract class PublishBundleMavenCentralTask @Inject constructor(
                             return
                         }
 
-                        DeploymentState.FAILED -> throw GradleException(buildString {
-                            append("Deployment failed with status: ${status.deploymentState}")
-                            if (!status.errors.isNullOrEmpty()) {
-                                append("\nErrors: ${status.errors}")
+                        DeploymentState.FAILED -> throw DeploymentFailedException(
+                            status.deploymentState,
+                            buildString {
+                                append("Deployment failed with status: ${status.deploymentState}")
+                                if (!status.errors.isNullOrEmpty()) {
+                                    append("\nErrors: ${status.errors}")
+                                }
                             }
-                        })
+                        )
 
                         DeploymentState.IN_PROGRESS -> {
                             if (checkNumber < maxChecks) {
@@ -246,7 +257,10 @@ public abstract class PublishBundleMavenCentralTask @Inject constructor(
                                     throw e
                                 }
                             } else {
-                                throw GradleException("Deployment did not complete after $maxChecks status checks. Current status: ${status.deploymentState}. Check Maven Central Portal for current status.")
+                                throw DeploymentFailedException(
+                                    status.deploymentState,
+                                    "Deployment did not complete after $maxChecks status checks. Current status: ${status.deploymentState}. Check Maven Central Portal for current status."
+                                )
                             }
                         }
                     }
@@ -275,3 +289,27 @@ public abstract class PublishBundleMavenCentralTask @Inject constructor(
     }
 
 }
+
+/**
+ * Exception thrown when a deployment fails or times out.
+ * Carries the [lastState] so the caller can decide whether to attempt dropping the deployment.
+ */
+internal class DeploymentFailedException(
+    val lastState: DeploymentStateType,
+    message: String
+) : GradleException(message)
+
+/**
+ * Whether a deployment in this state can be dropped via the Maven Central Portal API.
+ * Deployments in PUBLISHING or PUBLISHED state cannot be dropped.
+ */
+internal val DeploymentStateType.isDroppable: Boolean
+    get() = when (this) {
+        DeploymentStateType.PENDING,
+        DeploymentStateType.VALIDATING,
+        DeploymentStateType.VALIDATED,
+        DeploymentStateType.FAILED,
+        DeploymentStateType.UNKNOWN -> true
+        DeploymentStateType.PUBLISHING,
+        DeploymentStateType.PUBLISHED -> false
+    }

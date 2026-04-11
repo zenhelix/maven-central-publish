@@ -96,14 +96,28 @@ public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
             createApiClient(baseUrl.get()).use { client ->
                 val deploymentIds = uploadAllBundles(client, creds, bundleFiles, effectiveType, baseName)
 
+                val lastKnownStates = mutableMapOf<UUID, DeploymentStateType>()
+
                 try {
-                    waitForAllDeploymentsValidated(client, creds, deploymentIds, effectiveType, maxChecks, checkDelay)
+                    waitForAllDeploymentsValidated(client, creds, deploymentIds, effectiveType, maxChecks, checkDelay, lastKnownStates)
 
                     if (effectiveType != requestedType) {
                         publishAllDeployments(client, creds, deploymentIds)
                     }
                 } catch (e: Exception) {
-                    dropAllDeployments(client, creds, deploymentIds)
+                    val droppableIds = deploymentIds.filter { id ->
+                        val state = lastKnownStates[id]
+                        state == null || state.isDroppable
+                    }
+                    val nonDroppableIds = deploymentIds - droppableIds.toSet()
+
+                    if (nonDroppableIds.isNotEmpty()) {
+                        logger.warn(
+                            "Deployments {} are in non-droppable state and will not be dropped. Check Maven Central Portal.",
+                            nonDroppableIds
+                        )
+                    }
+                    dropAllDeployments(client, creds, droppableIds)
                     throw e
                 }
             }
@@ -173,7 +187,8 @@ public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
         deploymentIds: List<UUID>,
         effectiveType: PublishingType?,
         maxChecks: Int,
-        checkDelay: Duration
+        checkDelay: Duration,
+        lastKnownStates: MutableMap<UUID, DeploymentStateType>
     ) {
         val terminalStates = mutableMapOf<UUID, DeploymentStateType>()
 
@@ -186,6 +201,7 @@ public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
                     is HttpResponseResult.Success -> {
                         val status = statusResult.data
                         val state = status.deploymentState
+                        lastKnownStates[deploymentId] = state
 
                         when {
                             state == DeploymentStateType.FAILED || state == DeploymentStateType.UNKNOWN -> {
