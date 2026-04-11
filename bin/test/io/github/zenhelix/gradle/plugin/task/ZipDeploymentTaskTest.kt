@@ -5,6 +5,7 @@ import java.util.zip.ZipFile
 import org.assertj.core.api.Assertions.assertThat
 import org.gradle.api.Project
 import org.gradle.api.publish.maven.plugins.MavenPublishPlugin
+import org.gradle.api.tasks.TaskProvider
 import org.gradle.kotlin.dsl.apply
 import org.gradle.kotlin.dsl.listProperty
 import org.gradle.kotlin.dsl.register
@@ -34,7 +35,7 @@ class ZipDeploymentTaskTest {
 
         val zipTask = project.registerZipTask("functionalTest") {
             publications.addAll(publicationInfos)
-            publications.get().forEach { configureContentFor(it) }
+            configureContent()
         }.get()
 
         zipTask.run()
@@ -77,7 +78,7 @@ class ZipDeploymentTaskTest {
 
         val zipTask = project.registerZipTask("multiGavTest") {
             publications.addAll(publicationInfos)
-            publications.get().forEach { configureContentFor(it) }
+            configureContent()
         }.get()
 
         zipTask.run()
@@ -131,16 +132,16 @@ class ZipDeploymentTaskTest {
         artifactFile: File,
         classifier: String? = null,
         extension: String = "jar",
+        checksumTask: TaskProvider<CreateChecksumTask>? = null,
         gav: GAV = GAV("com.example", "test", "1.0.0")
     ): PublicationInfo {
         val artifactInfo = ArtifactInfo(ArtifactFileInfo(artifactFile, classifier, extension), gav)
 
         return PublicationInfo(
-            projectPath = this.path,
             gav = gav,
             publicationName = "java",
             artifacts = this.objects.listProperty<ArtifactInfo>().apply { add(artifactInfo) },
-            checksumFiles = null
+            checksumTask = checksumTask
         )
     }
 

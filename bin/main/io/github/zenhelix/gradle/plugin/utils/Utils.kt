@@ -23,7 +23,6 @@ internal fun MavenPublicationInternal.mapModel(
     project: Project,
     checksumTask: TaskProvider<CreateChecksumTask>
 ): PublicationInfo = PublicationInfo(
-    projectPath = project.path,
     gav = GAV.of(this),
     publicationName = this.name,
     artifacts = project.objects.listProperty<ArtifactInfo>().apply {
@@ -33,7 +32,7 @@ internal fun MavenPublicationInternal.mapModel(
             }
         })
     },
-    checksumFiles = checksumTask.flatMap { it.checksumFiles }
+    checksumTask = checksumTask
 )
 
 internal fun PublishingType.mapModel(): io.github.zenhelix.gradle.plugin.client.model.PublishingType = when (this) {

@@ -2,18 +2,16 @@ package io.github.zenhelix.gradle.plugin.task
 
 import java.io.File
 import java.io.Serializable
-import org.gradle.api.file.RegularFile
 import org.gradle.api.provider.ListProperty
-import org.gradle.api.provider.Provider
 import org.gradle.api.publish.maven.MavenArtifact
 import org.gradle.api.publish.maven.MavenPublication
+import org.gradle.api.tasks.TaskProvider
 
 public data class PublicationInfo(
-    val projectPath: String,
     private val gav: GAV,
     val publicationName: String,
     val artifacts: ListProperty<ArtifactInfo>,
-    val checksumFiles: Provider<List<RegularFile>>?
+    val checksumTask: TaskProvider<CreateChecksumTask>? // TODO remove from dto
 ) : Serializable {
 
     val artifactPath: String by lazy {
