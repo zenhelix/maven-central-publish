@@ -112,6 +112,11 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
 
             zipFile.set(zipAllPublicationsTask.flatMap { it.archiveFile })
         }
+
+        // Wire publish lifecycle task to Maven Central Portal publish task
+        project.findPublishLifecycleTask().configure {
+            dependsOn(publishAllPublicationsTask)
+        }
     }
 
     private fun configureRootProjectLifecycle(rootProject: Project, extension: MavenCentralUploaderExtension) {

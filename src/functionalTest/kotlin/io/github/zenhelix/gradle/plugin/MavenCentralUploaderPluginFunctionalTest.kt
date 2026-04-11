@@ -850,6 +850,68 @@ class MavenCentralUploaderPluginFunctionalTest {
     }
 
     @Test
+    fun `subproject-only plugin application should wire publish to maven central tasks`() {
+        val version = "1.0.0"
+        val module1 = "lib-core"
+        val module2 = "lib-api"
+
+        testProjectDir.settingsGradleFile().writeText(settings("test-library", module1, module2))
+
+        // Root does NOT apply the plugin
+        testProjectDir.buildGradleFile().writeText(
+            """
+            ${group(version = version)}
+            """.trimIndent()
+        )
+
+        // Each subproject applies the plugin independently
+        listOf(module1, module2).forEach { module ->
+            testProjectDir.buildGradleFile(module).writeText(
+                """
+                plugins {
+                    `java-library`
+                    id("$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
+                }
+
+                publishing {
+                    repositories {
+                        mavenLocal()
+                        ${mavenCentralPortal()}
+                    }
+                    publications {
+                        create<MavenPublication>("mavenJava") {
+                            from(components["java"])
+                        }
+                    }
+                }
+
+                ${signing()}
+                $pom
+                """.trimIndent()
+            )
+        }
+
+        testProjectDir.createJavaMainClass(module1)
+        testProjectDir.createJavaMainClass(module2)
+
+        // Verify dry-run: each subproject's publish should trigger its Maven Central task
+        val dryRun = gradleDryRunRunner(testProjectDir, "publish")
+
+        GradleDryRunOutputAssert.assertThat(dryRun)
+            .containsTask(":$module1:publishAllPublicationsToMavenCentralPortalRepository")
+            .containsTask(":$module2:publishAllPublicationsToMavenCentralPortalRepository")
+
+        // Verify actual run produces publishing logs
+        val result = gradleRunnerDebug(testProjectDir) {
+            withVersion(version)
+            withTask("publish")
+        }
+
+        BuildOutputAssert.assertThat(result.output)
+            .containsPublishingLogCount(2)
+    }
+
+    @Test
     fun `root project with publications and subprojects should publish only aggregated archive`() {
         val version = "2.5.0"
         val module1 = "module-a"
