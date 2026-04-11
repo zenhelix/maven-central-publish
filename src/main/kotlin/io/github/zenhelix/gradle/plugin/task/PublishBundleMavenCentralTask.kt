@@ -246,7 +246,12 @@ public abstract class PublishBundleMavenCentralTask @Inject constructor(
 
                         DeploymentState.IN_PROGRESS -> {
                             if (checkNumber < maxChecks) {
-                                Thread.sleep(checkDelay.toMillis())
+                                try {
+                                    Thread.sleep(checkDelay.toMillis())
+                                } catch (e: InterruptedException) {
+                                    Thread.currentThread().interrupt()
+                                    throw e
+                                }
                             } else {
                                 throw GradleException("Deployment did not complete after $maxChecks status checks. Current status: ${status.deploymentState}. Check Maven Central Portal for current status.")
                             }
@@ -281,6 +286,9 @@ public abstract class PublishBundleMavenCentralTask @Inject constructor(
                     logger.warn("Failed to drop deployment {}: {}", deploymentId, result.cause.message)
                 }
             }
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+            logger.warn("Interrupted while dropping deployment {}", deploymentId)
         } catch (e: Exception) {
             logger.warn("Failed to drop deployment {}: {}", deploymentId, e.message)
         }

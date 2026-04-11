@@ -123,7 +123,7 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
 
                 archiveFileName.set(project.provider { "${project.name}-${publicationName}-${project.version}.zip" })
 
-                configureContent()
+                configureContentFor(publicationInfo)
             }
 
             project.registerPublishPublicationTask(publicationName, extension) {
@@ -142,7 +142,7 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
 
                 this.publications.add(publicationInfo)
 
-                configureContent()
+                configureContentFor(publicationInfo)
             }
         }
     }
@@ -258,11 +258,11 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
 
                 this.publications.addAll(allPublicationsInfo)
 
+                allPublicationsInfo.forEach { configureContentFor(it) }
+
                 archiveFileName.set(rootProject.provider {
                     "${rootProject.name}-allModules-${rootProject.version}.zip"
                 })
-
-                configureContent()
             }
 
             rootProject.registerPublishAllModulesTask(extension) {

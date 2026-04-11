@@ -10,10 +10,8 @@ import org.gradle.api.tasks.bundling.Zip
 /**
  * Task that creates ZIP deployment bundles for Maven Central Portal API.
  *
- * Content configuration is done via [configureContent], which sets up the
- * CopySpec. Providers within the spec resolve lazily at execution time,
- * ensuring that artifacts added by late-configuring plugins (KMP, AGP)
- * are included in the bundle.
+ * Use [configureContentFor] to add a single publication's artifacts to the CopySpec.
+ * Each publication should be added exactly once to avoid duplicate entries.
  */
 @CacheableTask
 public abstract class ZipDeploymentTask : Zip() {
@@ -28,19 +26,17 @@ public abstract class ZipDeploymentTask : Zip() {
         duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     }
 
-    public fun configureContent() {
-        publications.get().forEach { info ->
-            info.checksumTask?.let { checksumTask ->
-                from(checksumTask.flatMap { it.checksumFiles }) {
-                    into(info.artifactPath)
-                }
+    public fun configureContentFor(info: PublicationInfo) {
+        info.checksumTask?.let { checksumTask ->
+            from(checksumTask.flatMap { it.checksumFiles }) {
+                into(info.artifactPath)
             }
+        }
 
-            info.artifacts.get().forEach { artifactInfo ->
-                from(artifactInfo.file()) {
-                    into(info.artifactPath)
-                    rename { artifactInfo.artifactName }
-                }
+        info.artifacts.get().forEach { artifactInfo ->
+            from(artifactInfo.file()) {
+                into(info.artifactPath)
+                rename { artifactInfo.artifactName }
             }
         }
     }
