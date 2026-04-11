@@ -45,14 +45,14 @@ testing {
             if (this is JvmTestSuite) {
                 useJUnitJupiter()
                 dependencies {
-                    implementation("org.assertj:assertj-core:3.27.6")
+                    implementation("org.assertj:assertj-core:3.27.7")
                 }
             }
         }
 
         val test by getting(JvmTestSuite::class) {
             dependencies {
-                implementation("io.mockk:mockk:1.14.7")
+                implementation("io.mockk:mockk:1.14.9")
             }
         }
         val functionalTest by registering(JvmTestSuite::class) {
@@ -125,8 +125,8 @@ gradlePlugin {
 }
 
 dependencies {
-    compileOnly("org.jetbrains.kotlin:kotlin-gradle-plugin:2.3.0")
-    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.20.1")
+    compileOnly("org.jetbrains.kotlin:kotlin-gradle-plugin:2.3.20")
+    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.21.2")
 }
 
 publishing {
