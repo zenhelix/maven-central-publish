@@ -101,31 +101,35 @@ For root project with subprojects:
 
 == Lifecycle Task Behavior
 
-Plugin integrates with Gradle's `publish` lifecycle task:
+Plugin integrates with Gradle's `publish` lifecycle task in two modes:
 
-=== Single-Module Projects
+=== Mode 1: Independent Publishing (default)
 
-When root project has publications and no subprojects with publications:
-
-[source,bash]
-----
-./gradlew publish
-----
-
-Executes: `publishAllPublicationsToMavenCentralPortalRepository`
-
-=== Multi-Module Projects
-
-When subprojects have publications:
+Each project that applies the plugin publishes its own bundle independently.
+This is the default when the plugin is applied to individual projects (including via convention plugins in `buildSrc`).
 
 [source,bash]
 ----
 ./gradlew publish
 ----
 
-Executes: `publishAllModulesToMavenCentralPortalRepository`
+Each project executes its own `publishAllPublicationsToMavenCentralPortalRepository`.
 
-Aggregates all publications from root and subprojects into single deployment bundle.
+NOTE: When multiple subprojects publish independently, a warning is emitted suggesting atomic aggregation.
+
+=== Mode 2: Atomic Aggregation
+
+When the plugin is applied to the *root project* and subprojects have publications, all modules are aggregated into a single deployment bundle:
+
+[source,bash]
+----
+./gradlew publish
+----
+
+Executes: `publishAllModulesToMavenCentralPortalRepository` (root only).
+Subprojects do not publish independently — one bundle, one deployment, atomic release.
+
+To enable this mode, apply the plugin to the root project and configure credentials there.
 
 == Usage
 
@@ -199,6 +203,55 @@ Root task aggregates all modules:
 ----
 ./gradlew publishAllModulesToMavenCentralPortalRepository
 ----
+
+=== Convention Plugin (buildSrc)
+
+Common pattern using a convention plugin in `buildSrc`:
+
+.buildSrc/src/main/kotlin/my-publishing.gradle.kts
+[source,kotlin]
+----
+plugins {
+    id("io.github.zenhelix.maven-central-publish")
+}
+
+publishing {
+    repositories {
+        mavenCentralPortal {
+            credentials {
+                username = System.getenv("MAVEN_SONATYPE_USERNAME")
+                password = System.getenv("MAVEN_SONATYPE_TOKEN")
+            }
+        }
+    }
+}
+
+signing {
+    val signingKey: String? by project
+    val signingPassword: String? by project
+    useInMemoryPgpKeys(signingKey, signingPassword)
+    sign(publishing.publications)
+}
+----
+
+.subproject/build.gradle.kts
+[source,kotlin]
+----
+plugins {
+    `java-library`
+    id("my-publishing")
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("mavenJava") {
+            from(components["java"])
+        }
+    }
+}
+----
+
+Each subproject publishes independently. For atomic multi-module publishing, also apply the plugin to the root project.
 
 == Requirements
 
