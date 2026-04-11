@@ -19,10 +19,12 @@ import io.github.zenhelix.gradle.plugin.utils.registerZipPublicationTask
 import org.gradle.api.NamedDomainObjectCollection
 import org.gradle.api.Plugin
 import org.gradle.api.Project
+import org.gradle.api.Task
 import org.gradle.api.provider.ListProperty
 import org.gradle.api.publish.maven.internal.publication.MavenPublicationInternal
 import org.gradle.api.publish.maven.plugins.MavenPublishPlugin
 import org.gradle.api.tasks.TaskDependency
+import org.gradle.api.tasks.TaskProvider
 import org.gradle.internal.extensions.stdlib.capitalized
 import org.gradle.kotlin.dsl.apply
 import org.gradle.kotlin.dsl.create
@@ -79,68 +81,69 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
     }
 
     private fun configureZipDeploymentTasks(project: Project, extension: MavenCentralUploaderExtension) {
-        val publications: NamedDomainObjectCollection<MavenPublicationInternal>? = project.findMavenPublications()
-        if (publications.isNullOrEmpty()) {
-            return
-        }
+        val publications = project.findMavenPublications() ?: return
 
-        val allTaskDependencies: Map<String, ListProperty<TaskDependency>> =
-            publications.associateBy({ it.name }) { publication ->
-                project.objects.listProperty<TaskDependency>().apply {
-                    publication.allPublishableArtifacts { this@apply.addAll(buildDependencies) }
-                }
-            }
-
-        val publicationInfos = publications.associateWith { publication ->
-            val checksumTask = project.registerChecksumTask(publication.name) {
-                dependsOn(allTaskDependencies.getValue(publication.name))
-            }
-            publication.mapModel(project, checksumTask)
-        }
-
-        publicationInfos.forEach { (publication, publicationInfo) ->
-            val zipTask = project.registerZipPublicationTask(publication.name) {
-                dependsOn(allTaskDependencies.getValue(publication.name))
-                publicationInfo.checksumTask?.also { dependsOn(it) }
-
-                this.publications.add(publicationInfo)
-
-                archiveFileName.set(project.provider { "${project.name}-${publication.name}-${project.version}.zip" })
-
-                configureContent()
-            }
-
-            val publishTask = project.registerPublishPublicationTask(publication.name, extension) {
-                dependsOn(zipTask)
-
-                zipFile.set(zipTask.flatMap { it.archiveFile })
-            }
-        }
-
-        val checksumsAllPublicationsTask = project.registerChecksumsAllPublicationsTask {
-            dependsOn(publicationInfos.values.mapNotNull { it.checksumTask })
-        }
+        // Register aggregation tasks first (they'll collect per-publication content lazily)
+        val checksumsAllPublicationsTask = project.registerChecksumsAllPublicationsTask()
 
         val zipAllPublicationsTask = project.registerZipAllPublicationsTask {
-            dependsOn(allTaskDependencies.values)
-            dependsOn(checksumsAllPublicationsTask)
-
-            this.publications.addAll(publicationInfos.values)
-
             archiveFileName.set(project.provider { "${project.name}-allPublications-${project.version}.zip" })
-
-            configureContent()
         }
 
         val publishAllPublicationsTask = project.registerPublishAllPublicationsTask(extension) {
             dependsOn(zipAllPublicationsTask)
-
             zipFile.set(zipAllPublicationsTask.flatMap { it.archiveFile })
         }
 
         // Wire publish lifecycle task to Maven Central Portal publish task
         project.findPublishLifecycleTask().configure {
             dependsOn(publishAllPublicationsTask)
+        }
+
+        // React to each publication (existing and future)
+        publications.configureEach {
+            val publication = this as MavenPublicationInternal
+            val publicationName = publication.name
+
+            val taskDependencies = project.objects.listProperty<TaskDependency>().apply {
+                publication.allPublishableArtifacts { this@apply.addAll(buildDependencies) }
+            }
+
+            val checksumTask = project.registerChecksumTask(publicationName) {
+                dependsOn(taskDependencies)
+            }
+
+            val publicationInfo = publication.mapModel(project, checksumTask)
+
+            val zipTask = project.registerZipPublicationTask(publicationName) {
+                dependsOn(taskDependencies)
+                publicationInfo.checksumTask?.also { dependsOn(it) }
+
+                this.publications.add(publicationInfo)
+
+                archiveFileName.set(project.provider { "${project.name}-${publicationName}-${project.version}.zip" })
+
+                configureContent()
+            }
+
+            project.registerPublishPublicationTask(publicationName, extension) {
+                dependsOn(zipTask)
+                zipFile.set(zipTask.flatMap { it.archiveFile })
+            }
+
+            // Wire into aggregation tasks
+            checksumsAllPublicationsTask.configure {
+                dependsOn(checksumTask)
+            }
+
+            zipAllPublicationsTask.configure {
+                dependsOn(taskDependencies)
+                dependsOn(checksumTask)
+
+                this.publications.add(publicationInfo)
+
+                configureContent()
+            }
         }
     }
 
@@ -164,8 +167,8 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
                 project.findPublishLifecycleTask().configure {
                     setDependsOn(dependsOn.filterNot { dep ->
                         val name = when (dep) {
-                            is org.gradle.api.tasks.TaskProvider<*> -> dep.name
-                            is org.gradle.api.Task -> dep.name
+                            is TaskProvider<*> -> dep.name
+                            is Task -> dep.name
                             is String -> dep
                             else -> null
                         }
@@ -187,8 +190,7 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
 
         if (subprojectsWithPlugin.size > 1) {
             rootProject.logger.warn(
-                "Multiple projects publish to Maven Central independently. " +
-                "For atomic multi-module publishing, apply the plugin to the root project."
+                "Multiple projects publish to Maven Central independently. For atomic multi-module publishing, apply the plugin to the root project."
             )
         }
     }

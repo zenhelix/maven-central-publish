@@ -25,7 +25,7 @@ public abstract class ZipDeploymentTask : Zip() {
         group = PUBLISH_TASK_GROUP
         description = "Creates ZIP deployment bundle for Maven Central Portal API"
 
-        duplicatesStrategy = DuplicatesStrategy.FAIL
+        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     }
 
     public fun configureContent() {
