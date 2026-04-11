@@ -303,4 +303,89 @@ class MavenCentralApiClientImplTest {
         ).contains("https://test/api/v1/publisher/deployment/12345678-1234-1234-1234-123456789012")
     }
 
+    @Test
+    fun `uploadDeploymentBundle should retry on HTTP 500`() {
+        val expectedDeploymentId = UUID.fromString("12345678-1234-1234-1234-123456789012")
+        var callCount = 0
+
+        every {
+            mockHttpClient.send(any<HttpRequest>(), any<BodyHandler<String>>())
+        } answers {
+            callCount++
+            if (callCount == 1) {
+                mockk<HttpResponse<String>> {
+                    every { statusCode() } returns 500
+                    every { body() } returns "Internal Server Error"
+                    every { headers() } returns mockk { every { map() } returns emptyMap() }
+                }
+            } else {
+                mockk<HttpResponse<String>> {
+                    every { statusCode() } returns 201
+                    every { body() } returns expectedDeploymentId.toString()
+                    every { headers() } returns mockk { every { map() } returns mapOf("Content-Type" to listOf("text/plain")) }
+                }
+            }
+        }
+
+        val result = client.uploadDeploymentBundle(
+            credentials = BearerTokenCredentials(token = "test-token-123"),
+            bundle = createTestBundleFile()
+        )
+
+        assertThat(result).isInstanceOf(HttpResponseResult.Success::class.java)
+        assertThat((result as HttpResponseResult.Success).data).isEqualTo(expectedDeploymentId)
+        assertThat(callCount).isEqualTo(2)
+    }
+
+    @Test
+    fun `uploadDeploymentBundle should return UnexpectedError on timeout`() {
+        every {
+            mockHttpClient.send(any<HttpRequest>(), any<BodyHandler<String>>())
+        } throws java.net.http.HttpTimeoutException("Connection timed out")
+
+        val result = client.uploadDeploymentBundle(
+            credentials = BearerTokenCredentials(token = "test-token-123"),
+            bundle = createTestBundleFile()
+        )
+
+        assertThat(result).isInstanceOf(HttpResponseResult.UnexpectedError::class.java)
+        assertThat((result as HttpResponseResult.UnexpectedError).cause)
+            .isInstanceOf(java.net.http.HttpTimeoutException::class.java)
+    }
+
+    @Test
+    fun `deploymentStatus should handle invalid JSON gracefully`() {
+        every {
+            mockHttpClient.send(any<HttpRequest>(), any<BodyHandler<String>>())
+        } returns mockk<HttpResponse<String>> {
+            every { statusCode() } returns 200
+            every { body() } returns "not valid json"
+            every { headers() } returns mockk { every { map() } returns emptyMap() }
+        }
+
+        val result = client.deploymentStatus(
+            credentials = BearerTokenCredentials(token = "test-token-123"),
+            deploymentId = UUID.fromString("12345678-1234-1234-1234-123456789012")
+        )
+
+        // Invalid JSON with 200 status returns Error (parse failure results in null status)
+        assertThat(result).isInstanceOf(HttpResponseResult.Error::class.java)
+    }
+
+    @Test
+    fun `uploadDeploymentBundle should return UnexpectedError after all retries exhausted`() {
+        every {
+            mockHttpClient.send(any<HttpRequest>(), any<BodyHandler<String>>())
+        } throws java.net.ConnectException("Connection refused")
+
+        val result = client.uploadDeploymentBundle(
+            credentials = BearerTokenCredentials(token = "test-token-123"),
+            bundle = createTestBundleFile()
+        )
+
+        assertThat(result).isInstanceOf(HttpResponseResult.UnexpectedError::class.java)
+        assertThat((result as HttpResponseResult.UnexpectedError).cause)
+            .isInstanceOf(java.net.ConnectException::class.java)
+    }
+
 }

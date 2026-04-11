@@ -72,8 +72,7 @@ public abstract class CreateChecksumTask : DefaultTask() {
                         val artifactParentDir = artifactFile.parentFile?.name ?: "artifacts"
                         val checksumDir = outDir.asFile
                         val targetDir = File(checksumDir, artifactParentDir)
-                        val algorithmSuffix = hashFunction.algorithm.lowercase(Locale.ROOT).replace("-", "")
-                        val checksumFileName = "${artifact.artifactName}.$algorithmSuffix"
+                        val checksumFileName = "${artifact.artifactName}.${algorithmSuffix(hashFunction)}"
                         project.layout.projectDirectory.file(File(targetDir, checksumFileName).absolutePath)
                     }
                 }
@@ -140,11 +139,13 @@ public abstract class CreateChecksumTask : DefaultTask() {
         val checksumDir = outputDirectory.get().asFile
         val targetDir = File(checksumDir, artifactParentDir)
 
-        val algorithmSuffix = hashFunction.algorithm.lowercase(Locale.ROOT).replace("-", "")
-        val checksumFileName = "${artifact.artifactName}.$algorithmSuffix"
+        val checksumFileName = "${artifact.artifactName}.${algorithmSuffix(hashFunction)}"
 
         return File(targetDir, checksumFileName)
     }
+
+    private fun algorithmSuffix(hashFunction: HashFunction): String =
+        hashFunction.algorithm.lowercase(Locale.ROOT).replace("-", "")
 
     private companion object {
         /**

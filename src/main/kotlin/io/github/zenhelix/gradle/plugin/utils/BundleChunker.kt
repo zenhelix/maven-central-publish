@@ -23,10 +23,17 @@ public class BundleSizeExceededException(
 )
 
 /**
- * Groups modules into chunks using first-fit decreasing bin-packing.
+ * Groups modules into chunks that each fit within a size limit.
  *
- * Modules are sorted by size (largest first) and placed into the first chunk
- * that has enough remaining capacity. This minimizes the number of chunks.
+ * Uses the **first-fit decreasing (FFD) bin-packing algorithm**: modules are sorted
+ * by size (largest first) and each is placed into the first chunk with enough remaining
+ * capacity. FFD is chosen because it produces near-optimal results (at most 11/9 * OPT + 6/9
+ * bins) while being simple to implement and fast (O(n log n) sort + O(n*m) placement).
+ *
+ * Guarantees:
+ * - Every module appears in exactly one chunk.
+ * - No chunk exceeds [maxChunkSize].
+ * - Throws [BundleSizeExceededException] if any single module exceeds the limit.
  */
 public object BundleChunker {
 

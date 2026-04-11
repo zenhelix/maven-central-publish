@@ -17,12 +17,8 @@ bin/
 tmp/
 *.tmp
 *.bak
-*.swp
-*~.nib
 local.properties
 .settings/
-.loadpath
-.recommenders
 
 ### Kotlin template
 .kotlin
@@ -31,12 +27,6 @@ local.properties
 
 # Log file
 *.log
-
-# BlueJ files
-*.ctxt
-
-# Mobile Tools for Java (J2ME)
-.mtj.tmp/
 
 # Package Files #
 *.jar

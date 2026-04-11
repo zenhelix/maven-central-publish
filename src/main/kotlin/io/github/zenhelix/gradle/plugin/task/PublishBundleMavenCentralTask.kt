@@ -1,8 +1,8 @@
 package io.github.zenhelix.gradle.plugin.task
 
 import io.github.zenhelix.gradle.plugin.client.MavenCentralApiClient
-import io.github.zenhelix.gradle.plugin.client.MavenCentralApiClientDumbImpl
-import io.github.zenhelix.gradle.plugin.client.MavenCentralApiClientImpl
+import io.github.zenhelix.gradle.plugin.client.createApiClient as createDefaultApiClient
+import io.github.zenhelix.gradle.plugin.client.tryDropDeployment
 import io.github.zenhelix.gradle.plugin.client.model.Credentials
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentStateType
 import io.github.zenhelix.gradle.plugin.client.model.HttpResponseResult
@@ -92,13 +92,7 @@ public abstract class PublishBundleMavenCentralTask @Inject constructor(
      * Creates the API client. Called at execution time (not configuration time)
      * to avoid configuration cache serialization issues with HttpClient.
      */
-    protected open fun createApiClient(url: String): MavenCentralApiClient {
-        return if (url.equals("http://test", ignoreCase = true)) {
-            MavenCentralApiClientDumbImpl()
-        } else {
-            MavenCentralApiClientImpl(url)
-        }
-    }
+    protected open fun createApiClient(url: String): MavenCentralApiClient = createDefaultApiClient(url)
 
     init {
         group = PUBLISH_TASK_GROUP
@@ -134,7 +128,19 @@ public abstract class PublishBundleMavenCentralTask @Inject constructor(
                         val deploymentId = uploadResult.data
                         try {
                             waitForDeploymentCompletion(apiClient, creds, deploymentId, type, maxChecks, checkDelay)
-                        } catch (e: Exception) {
+                        } catch (e: DeploymentFailedException) {
+                            if (e.lastState.isDroppable) {
+                                tryDropDeployment(apiClient, creds, deploymentId)
+                            } else {
+                                logger.warn(
+                                    "Deployment {} is in {} state and cannot be dropped. Check Maven Central Portal for current status.",
+                                    deploymentId, e.lastState
+                                )
+                            }
+                            throw e
+                        } catch (e: GradleException) {
+                            // Status check HTTP error or parse failure — deployment state unknown,
+                            // attempt drop as best-effort (tryDropDeployment never throws)
                             tryDropDeployment(apiClient, creds, deploymentId)
                             throw e
                         }
@@ -185,9 +191,17 @@ public abstract class PublishBundleMavenCentralTask @Inject constructor(
     }
 
     /**
-     * Waits for deployment completion by polling the status endpoint.
-     * Network errors are handled by the API client's retry mechanism.
-     * This method only handles the polling logic - checking if deployment is still in progress.
+     * Polls the deployment status endpoint until the deployment reaches a terminal state.
+     *
+     * State machine transitions:
+     * - PENDING → VALIDATING → VALIDATED → PUBLISHING → PUBLISHED (success for AUTOMATIC)
+     * - PENDING → VALIDATING → VALIDATED (success for USER_MANAGED — user releases manually)
+     * - Any state → FAILED (error — deployment is dropped by caller)
+     * - UNKNOWN is treated as FAILED
+     *
+     * If the deployment does not reach a terminal state within [maxChecks] polls,
+     * a [DeploymentFailedException] is thrown. The caller checks [DeploymentStateType.isDroppable]
+     * to decide whether to attempt dropping — deployments in PUBLISHING state cannot be dropped.
      */
     private fun waitForDeploymentCompletion(
         client: MavenCentralApiClient,
@@ -229,12 +243,15 @@ public abstract class PublishBundleMavenCentralTask @Inject constructor(
                             return
                         }
 
-                        DeploymentState.FAILED -> throw GradleException(buildString {
-                            append("Deployment failed with status: ${status.deploymentState}")
-                            if (!status.errors.isNullOrEmpty()) {
-                                append("\nErrors: ${status.errors}")
+                        DeploymentState.FAILED -> throw DeploymentFailedException(
+                            status.deploymentState,
+                            buildString {
+                                append("Deployment failed with status: ${status.deploymentState}")
+                                if (!status.errors.isNullOrEmpty()) {
+                                    append("\nErrors: ${status.errors}")
+                                }
                             }
-                        })
+                        )
 
                         DeploymentState.IN_PROGRESS -> {
                             if (checkNumber < maxChecks) {
@@ -245,7 +262,10 @@ public abstract class PublishBundleMavenCentralTask @Inject constructor(
                                     throw e
                                 }
                             } else {
-                                throw GradleException("Deployment did not complete after $maxChecks status checks. Current status: ${status.deploymentState}. Check Maven Central Portal for current status.")
+                                throw DeploymentFailedException(
+                                    status.deploymentState,
+                                    "Deployment did not complete after $maxChecks status checks. Current status: ${status.deploymentState}. Check Maven Central Portal for current status."
+                                )
                             }
                         }
                     }
@@ -266,24 +286,7 @@ public abstract class PublishBundleMavenCentralTask @Inject constructor(
         deploymentId: UUID
     ) {
         logger.warn("Deployment failed, attempting to drop deployment {}", deploymentId)
-        try {
-            when (val result = client.dropDeployment(creds, deploymentId)) {
-                is HttpResponseResult.Success -> {
-                    logger.lifecycle("Deployment {} dropped successfully", deploymentId)
-                }
-                is HttpResponseResult.Error -> {
-                    logger.warn("Failed to drop deployment {}: HTTP {}, Response: {}", deploymentId, result.httpStatus, result.data)
-                }
-                is HttpResponseResult.UnexpectedError -> {
-                    logger.warn("Failed to drop deployment {}: {}", deploymentId, result.cause.message)
-                }
-            }
-        } catch (e: InterruptedException) {
-            Thread.currentThread().interrupt()
-            logger.warn("Interrupted while dropping deployment {}", deploymentId)
-        } catch (e: Exception) {
-            logger.warn("Failed to drop deployment {}: {}", deploymentId, e.message)
-        }
+        client.tryDropDeployment(creds, deploymentId, logger)
     }
 
     private enum class DeploymentState {
@@ -291,3 +294,27 @@ public abstract class PublishBundleMavenCentralTask @Inject constructor(
     }
 
 }
+
+/**
+ * Exception thrown when a deployment fails or times out.
+ * Carries the [lastState] so the caller can decide whether to attempt dropping the deployment.
+ */
+internal class DeploymentFailedException(
+    val lastState: DeploymentStateType,
+    message: String
+) : GradleException(message)
+
+/**
+ * Whether a deployment in this state can be dropped via the Maven Central Portal API.
+ * Deployments in PUBLISHING or PUBLISHED state cannot be dropped.
+ */
+internal val DeploymentStateType.isDroppable: Boolean
+    get() = when (this) {
+        DeploymentStateType.PENDING,
+        DeploymentStateType.VALIDATING,
+        DeploymentStateType.VALIDATED,
+        DeploymentStateType.FAILED,
+        DeploymentStateType.UNKNOWN -> true
+        DeploymentStateType.PUBLISHING,
+        DeploymentStateType.PUBLISHED -> false
+    }

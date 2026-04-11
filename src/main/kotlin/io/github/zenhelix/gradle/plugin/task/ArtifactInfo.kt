@@ -40,14 +40,6 @@ public data class ArtifactInfo(
 
     public fun file(): File = artifact.file
 
-    val artifactPath: String by lazy {
-        buildString(128) {
-            append(gav.group.replace('.', '/')).append('/')
-            append(gav.module).append('/')
-            append(gav.version)
-        }
-    }
-
     val artifactName: String by lazy {
         buildString(128) {
             append(gav.module).append('-').append(gav.version)

@@ -1,8 +1,8 @@
 package io.github.zenhelix.gradle.plugin.task
 
 import io.github.zenhelix.gradle.plugin.client.MavenCentralApiClient
-import io.github.zenhelix.gradle.plugin.client.MavenCentralApiClientDumbImpl
-import io.github.zenhelix.gradle.plugin.client.MavenCentralApiClientImpl
+import io.github.zenhelix.gradle.plugin.client.createApiClient as createDefaultApiClient
+import io.github.zenhelix.gradle.plugin.client.tryDropDeployment
 import io.github.zenhelix.gradle.plugin.client.model.Credentials
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentStateType
 import io.github.zenhelix.gradle.plugin.client.model.HttpResponseResult
@@ -50,13 +50,7 @@ public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
     @get:Input
     public abstract val statusCheckDelay: Property<Duration>
 
-    protected open fun createApiClient(url: String): MavenCentralApiClient {
-        return if (url.equals("http://test", ignoreCase = true)) {
-            MavenCentralApiClientDumbImpl()
-        } else {
-            MavenCentralApiClientImpl(url)
-        }
-    }
+    protected open fun createApiClient(url: String): MavenCentralApiClient = createDefaultApiClient(url)
 
     init {
         group = PUBLISH_TASK_GROUP
@@ -102,14 +96,31 @@ public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
             createApiClient(baseUrl.get()).use { client ->
                 val deploymentIds = uploadAllBundles(client, creds, bundleFiles, effectiveType, baseName)
 
+                val lastKnownStates = mutableMapOf<UUID, DeploymentStateType>()
+
                 try {
-                    waitForAllDeploymentsValidated(client, creds, deploymentIds, effectiveType, maxChecks, checkDelay)
+                    waitForAllDeploymentsValidated(client, creds, deploymentIds, effectiveType, maxChecks, checkDelay, lastKnownStates)
 
                     if (effectiveType != requestedType) {
                         publishAllDeployments(client, creds, deploymentIds)
                     }
+                } catch (e: DeploymentsAlreadyCleanedUpException) {
+                    // handlePublishFailure already dropped unpublished deployments — just rethrow
+                    throw e
                 } catch (e: Exception) {
-                    dropAllDeployments(client, creds, deploymentIds)
+                    val droppableIds = deploymentIds.filter { id ->
+                        val state = lastKnownStates[id]
+                        state == null || state.isDroppable
+                    }
+                    val nonDroppableIds = deploymentIds - droppableIds.toSet()
+
+                    if (nonDroppableIds.isNotEmpty()) {
+                        logger.warn(
+                            "Deployments {} are in non-droppable state and will not be dropped. Check Maven Central Portal.",
+                            nonDroppableIds
+                        )
+                    }
+                    dropAllDeployments(client, creds, droppableIds)
                     throw e
                 }
             }
@@ -179,7 +190,8 @@ public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
         deploymentIds: List<UUID>,
         effectiveType: PublishingType?,
         maxChecks: Int,
-        checkDelay: Duration
+        checkDelay: Duration,
+        lastKnownStates: MutableMap<UUID, DeploymentStateType>
     ) {
         val terminalStates = mutableMapOf<UUID, DeploymentStateType>()
 
@@ -192,6 +204,7 @@ public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
                     is HttpResponseResult.Success -> {
                         val status = statusResult.data
                         val state = status.deploymentState
+                        lastKnownStates[deploymentId] = state
 
                         when {
                             state == DeploymentStateType.FAILED || state == DeploymentStateType.UNKNOWN -> {
@@ -293,7 +306,7 @@ public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
         val unpublished = deploymentIds.filter { it !in publishedIds && it != failedId }
         dropAllDeployments(client, creds, unpublished)
 
-        throw GradleException(
+        throw DeploymentsAlreadyCleanedUpException(
             "$message WARNING: ${publishedIds.size} deployment(s) may already be published " +
                     "and cannot be rolled back (API limitation). " +
                     "Dropped ${unpublished.size} remaining unpublished deployment(s).",
@@ -307,26 +320,7 @@ public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
         deploymentIds: List<UUID>
     ) {
         for (deploymentId in deploymentIds) {
-            try {
-                when (val result = client.dropDeployment(creds, deploymentId)) {
-                    is HttpResponseResult.Success -> {
-                        logger.lifecycle("Dropped deployment $deploymentId")
-                    }
-
-                    is HttpResponseResult.Error -> {
-                        logger.warn("Failed to drop deployment $deploymentId: HTTP ${result.httpStatus}, Response: ${result.data}")
-                    }
-
-                    is HttpResponseResult.UnexpectedError -> {
-                        logger.warn("Failed to drop deployment $deploymentId: ${result.cause.message}")
-                    }
-                }
-            } catch (e: InterruptedException) {
-                Thread.currentThread().interrupt()
-                logger.warn("Interrupted while dropping deployment $deploymentId")
-            } catch (e: Exception) {
-                logger.warn("Failed to drop deployment $deploymentId: ${e.message}")
-            }
+            client.tryDropDeployment(creds, deploymentId, logger)
         }
     }
 
@@ -354,3 +348,11 @@ public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
         }
     }
 }
+
+/**
+ * Signals that [handlePublishFailure] already performed cleanup (dropped unpublished deployments).
+ * The outer catch block should NOT attempt additional drops when it sees this exception.
+ */
+internal class DeploymentsAlreadyCleanedUpException(
+    message: String, cause: Exception?
+) : GradleException(message, cause)

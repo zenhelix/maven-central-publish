@@ -8,10 +8,11 @@ import io.github.zenhelix.gradle.plugin.client.model.PublishingType
 import java.nio.file.Path
 import java.util.UUID
 
-public class MavenCentralApiClientDumbImpl : MavenCentralApiClient {
-
-    public var dropDeploymentCallCount: Int = 0
-        private set
+/**
+ * No-op API client for functional testing. Returns successful responses
+ * without making any HTTP calls. Used when [TEST_BASE_URL] is set as the base URL.
+ */
+internal class MavenCentralApiClientDumbImpl : MavenCentralApiClient {
 
     override fun uploadDeploymentBundle(
         credentials: Credentials, bundle: Path, publishingType: PublishingType?, deploymentName: String?
@@ -34,13 +35,24 @@ public class MavenCentralApiClientDumbImpl : MavenCentralApiClient {
 
     override fun dropDeployment(
         credentials: Credentials, deploymentId: UUID
-    ): HttpResponseResult<Unit, String> {
-        dropDeploymentCallCount++
-        return HttpResponseResult.Success(Unit)
-    }
+    ): HttpResponseResult<Unit, String> = HttpResponseResult.Success(Unit)
 
     override fun close() {
         // No resources to close in dummy implementation
     }
 
 }
+
+/**
+ * Sentinel URL that triggers the no-op [MavenCentralApiClientDumbImpl] in publish tasks.
+ * Used exclusively in functional tests to avoid real HTTP calls.
+ */
+internal const val TEST_BASE_URL: String = "https://test.invalid"
+
+/**
+ * Creates an [MavenCentralApiClient] for the given [url].
+ * Returns [MavenCentralApiClientDumbImpl] when [url] matches [TEST_BASE_URL],
+ * otherwise creates a real [MavenCentralApiClientImpl].
+ */
+internal fun createApiClient(url: String): MavenCentralApiClient =
+    if (url == TEST_BASE_URL) MavenCentralApiClientDumbImpl() else MavenCentralApiClientImpl(url)
