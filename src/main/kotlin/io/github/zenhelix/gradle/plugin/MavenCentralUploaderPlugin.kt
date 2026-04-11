@@ -120,25 +120,34 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
     }
 
     private fun configureRootProjectLifecycle(rootProject: Project, extension: MavenCentralUploaderExtension) {
-        val hasSubprojectsWithPublications = rootProject.subprojects.any {
+        val subprojectsWithPublications = rootProject.subprojects.filter {
             it.findMavenPublications()?.isNotEmpty() == true
         }
 
-        if (hasSubprojectsWithPublications) {
-            // Multi-module project: create aggregation and publish all modules together
+        if (subprojectsWithPublications.isNotEmpty()) {
+            // Mode 2: Atomic aggregation — create aggregation and override subproject wiring
             createAggregationTasks(rootProject, extension)
 
             rootProject.findPublishLifecycleTask().configure {
                 rootProject.tasks.findByName("publishAllModulesToMavenCentralPortalRepository")?.also { dependsOn(it) }
             }
-        } else {
-            // Single-module project: publish root project publications only
-            rootProject.findPublishLifecycleTask().configure {
-                rootProject.tasks.findByName("publishAllPublicationsToMavenCentralPortalRepository")?.also {
-                    dependsOn(it)
+
+            // Remove per-project publish -> Maven Central wiring to avoid duplicate deployments
+            // This applies to both subprojects and the root project itself
+            val projectsToUnwire = subprojectsWithPublications + rootProject
+            projectsToUnwire.forEach { project ->
+                project.findPublishLifecycleTask().configure {
+                    setDependsOn(dependsOn.filterNot { dep ->
+                        when (dep) {
+                            is org.gradle.api.tasks.TaskProvider<*> -> dep.name == "publishAllPublicationsToMavenCentralPortalRepository"
+                            is org.gradle.api.Task -> dep.name == "publishAllPublicationsToMavenCentralPortalRepository"
+                            else -> false
+                        }
+                    })
                 }
             }
         }
+        // Mode 1 single-module: lifecycle wiring already done in configureZipDeploymentTasks
     }
 
     private fun createAggregationTasks(rootProject: Project, extension: MavenCentralUploaderExtension) {

@@ -912,6 +912,61 @@ class MavenCentralUploaderPluginFunctionalTest {
     }
 
     @Test
+    fun `aggregation mode should not trigger per-subproject maven central publish`() {
+        val version = "1.0.0"
+        val module1 = "lib-core"
+        val module2 = "lib-api"
+
+        testProjectDir.settingsGradleFile().writeText(settings("test-library", module1, module2))
+
+        // Root DOES apply the plugin (Mode 2)
+        testProjectDir.buildGradleFile().writeText(
+            """
+            plugins {
+                id("$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
+            }
+
+            ${group(version = version)}
+
+            ${mavenCentralPortal()}
+
+            subprojects {
+                apply(plugin = "java-library")
+                apply(plugin = "$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
+
+                publishing {
+                    repositories {
+                        mavenLocal()
+                        ${mavenCentralPortal()}
+                    }
+                    publications {
+                        create<MavenPublication>("mavenJava") {
+                            from(components["java"])
+                        }
+                    }
+                }
+
+                ${signing()}
+                $pom
+            }
+            """.trimIndent()
+        )
+
+        testProjectDir.createJavaMainClass(module1)
+        testProjectDir.createJavaMainClass(module2)
+
+        val result = gradleRunnerDebug(testProjectDir) {
+            withVersion(version)
+            withTask("publish")
+        }
+
+        // Only ONE publishing log: the aggregated bundle, not per-subproject
+        BuildOutputAssert.assertThat(result.output)
+            .containsPublishingLogCount(1)
+            .containsPublishingLog("test-library-allModules-$version.zip", "AUTOMATIC", null)
+    }
+
+    @Test
     fun `root project with publications and subprojects should publish only aggregated archive`() {
         val version = "2.5.0"
         val module1 = "module-a"
