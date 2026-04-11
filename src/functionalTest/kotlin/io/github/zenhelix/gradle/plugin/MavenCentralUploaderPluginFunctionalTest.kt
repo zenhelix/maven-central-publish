@@ -25,6 +25,7 @@ import test.testkit.DirectoryAssert
 import test.testkit.GradleDryRunOutputAssert
 import test.testkit.GradleTasksOutputAssert
 import test.testkit.gradleDryRunRunner
+import test.testkit.gradleRunner
 import test.testkit.gradleRunnerDebug
 import test.testkit.gradleTasksRunner
 import org.assertj.core.api.Assertions.assertThat as assertThatString
@@ -1118,6 +1119,58 @@ class MavenCentralUploaderPluginFunctionalTest {
         }.containsSomeMavenArtifacts("test.zenhelix", module2, version) {
             standardJavaLibrary()
         }
+    }
+
+    @Test
+    fun `should be compatible with configuration cache`() {
+        val version = "1.0.0"
+        val moduleName = "cc-test"
+
+        testProjectDir.settingsGradleFile().writeText(settings(moduleName))
+        testProjectDir.buildGradleFile().writeText(
+            """
+            plugins {
+                `java-library`
+                id("$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
+            }
+
+            ${group(version = version)}
+
+            publishing {
+                repositories {
+                    mavenLocal()
+                    ${mavenCentralPortal()}
+                }
+                publications {
+                    create<MavenPublication>("mavenJava") {
+                        from(components["java"])
+                    }
+                }
+            }
+
+            ${signing()}
+            $pom
+            """.trimIndent()
+        )
+        testProjectDir.createJavaMainClass()
+
+        // First run: stores configuration cache entry
+        val firstRun = gradleRunner(testProjectDir) {
+            forwardOutput()
+            withVersion(version)
+            withTask("publish")
+            withArguments("--configuration-cache")
+        }
+        assertThatString(firstRun.output).contains("Configuration cache entry stored")
+
+        // Second run: reuses configuration cache entry
+        val secondRun = gradleRunner(testProjectDir) {
+            forwardOutput()
+            withVersion(version)
+            withTask("publish")
+            withArguments("--configuration-cache")
+        }
+        assertThatString(secondRun.output).contains("Reusing configuration cache")
     }
 
     @Test
