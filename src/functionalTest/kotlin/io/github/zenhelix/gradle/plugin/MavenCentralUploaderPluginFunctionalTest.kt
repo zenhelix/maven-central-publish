@@ -1120,4 +1120,56 @@ class MavenCentralUploaderPluginFunctionalTest {
         }
     }
 
+    @Test
+    fun `should include artifacts added in late afterEvaluate`() {
+        val version = "1.0.0"
+        val moduleName = "late-lib"
+
+        testProjectDir.settingsGradleFile().writeText(settings(moduleName))
+        //language=kotlin
+        testProjectDir.buildGradleFile().writeText(
+            """
+            plugins {
+                `java-library`
+                id("$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
+            }
+
+            ${group(version = version)}
+
+            publishing {
+                repositories {
+                    mavenLocal()
+                    ${mavenCentralPortal()}
+                }
+            }
+
+            ${signing()}
+            $pom
+
+            // Simulate AGP/KMP pattern: publication created in late afterEvaluate
+            afterEvaluate {
+                publishing {
+                    publications {
+                        create<MavenPublication>("lateLib") {
+                            from(components["java"])
+                        }
+                    }
+                }
+            }
+            """.trimIndent()
+        )
+        testProjectDir.createJavaMainClass()
+
+        gradleRunnerDebug(testProjectDir) {
+            withVersion(version)
+            withTask("zipDeploymentAllPublications")
+        }
+
+        assertThat(
+            ZipFile(testProjectDir.moduleBundleFile(null, moduleName, version, "allPublications").toFile())
+        ).containsMavenArtifacts("test.zenhelix", moduleName, version) {
+            standardJavaLibrary()
+        }
+    }
+
 }
