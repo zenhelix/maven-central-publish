@@ -39,7 +39,14 @@ public abstract class SplitZipDeploymentTask : DefaultTask() {
 
     @TaskAction
     public fun createSplitZips() {
+        val maxSize = maxBundleSize.get()
+        require(maxSize > 0) { "maxBundleSize must be positive, got: $maxSize" }
+
         val outputDir = outputDirectory.get().asFile
+        // Clean stale ZIPs from previous runs to prevent uploading outdated chunks
+        if (outputDir.exists()) {
+            outputDir.listFiles { f -> f.extension == "zip" }?.forEach { it.delete() }
+        }
         outputDir.mkdirs()
 
         val modulePublications = publications.get().groupBy { it.projectPath }
@@ -49,7 +56,6 @@ public abstract class SplitZipDeploymentTask : DefaultTask() {
             ModuleSize(projectPath, totalSize)
         }
 
-        val maxSize = maxBundleSize.get()
         val chunks = BundleChunker.chunk(moduleSizes, maxSize)
 
         if (chunks.isEmpty()) {

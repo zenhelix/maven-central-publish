@@ -82,17 +82,6 @@ internal fun Project.registerChecksumTask(
     configuration()
 }
 
-internal fun Project.registerPublishAllModulesTask(
-    mavenCentralUploaderExtension: MavenCentralUploaderExtension,
-    configuration: PublishBundleMavenCentralTask.() -> Unit = {}
-): TaskProvider<PublishBundleMavenCentralTask> = registerPublishBundleMavenCentralTask(
-    "publishAllModulesTo${MAVEN_CENTRAL_PORTAL_NAME.capitalized()}Repository",
-    mavenCentralUploaderExtension
-) {
-    description = "Publishes all Maven publications from all modules to the $MAVEN_CENTRAL_PORTAL_NAME repository."
-    configuration()
-}
-
 internal fun Project.registerSplitZipAllModulesTask(
     configuration: SplitZipDeploymentTask.() -> Unit = {}
 ): TaskProvider<SplitZipDeploymentTask> = this.tasks.register<SplitZipDeploymentTask>(
