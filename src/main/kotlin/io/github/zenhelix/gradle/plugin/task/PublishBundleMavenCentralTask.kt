@@ -139,7 +139,13 @@ public abstract class PublishBundleMavenCentralTask @Inject constructor(
 
                 when (uploadResult) {
                     is HttpResponseResult.Success -> {
-                        waitForDeploymentCompletion(apiClient, creds, uploadResult.data, type, maxChecks, checkDelay)
+                        val deploymentId = uploadResult.data
+                        try {
+                            waitForDeploymentCompletion(apiClient, creds, deploymentId, type, maxChecks, checkDelay)
+                        } catch (e: Exception) {
+                            tryDropDeployment(apiClient, creds, deploymentId)
+                            throw e
+                        }
                     }
 
                     is HttpResponseResult.Error -> {
@@ -254,6 +260,29 @@ public abstract class PublishBundleMavenCentralTask @Inject constructor(
                     statusResult.cause
                 )
             }
+        }
+    }
+
+    private fun tryDropDeployment(
+        client: MavenCentralApiClient,
+        creds: Credentials,
+        deploymentId: UUID
+    ) {
+        logger.warn("Deployment failed, attempting to drop deployment {}", deploymentId)
+        try {
+            when (val result = client.dropDeployment(creds, deploymentId)) {
+                is HttpResponseResult.Success -> {
+                    logger.lifecycle("Deployment {} dropped successfully", deploymentId)
+                }
+                is HttpResponseResult.Error -> {
+                    logger.warn("Failed to drop deployment {}: HTTP {}, Response: {}", deploymentId, result.httpStatus, result.data)
+                }
+                is HttpResponseResult.UnexpectedError -> {
+                    logger.warn("Failed to drop deployment {}: {}", deploymentId, result.cause.message)
+                }
+            }
+        } catch (e: Exception) {
+            logger.warn("Failed to drop deployment {}: {}", deploymentId, e.message)
         }
     }
 
