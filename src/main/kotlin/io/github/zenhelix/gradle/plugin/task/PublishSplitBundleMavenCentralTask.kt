@@ -2,6 +2,7 @@ package io.github.zenhelix.gradle.plugin.task
 
 import io.github.zenhelix.gradle.plugin.client.MavenCentralApiClient
 import io.github.zenhelix.gradle.plugin.client.createApiClient as createDefaultApiClient
+import io.github.zenhelix.gradle.plugin.client.tryDropDeployment
 import io.github.zenhelix.gradle.plugin.client.model.Credentials
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentStateType
 import io.github.zenhelix.gradle.plugin.client.model.HttpResponseResult
@@ -300,26 +301,7 @@ public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
         deploymentIds: List<UUID>
     ) {
         for (deploymentId in deploymentIds) {
-            try {
-                when (val result = client.dropDeployment(creds, deploymentId)) {
-                    is HttpResponseResult.Success -> {
-                        logger.lifecycle("Dropped deployment $deploymentId")
-                    }
-
-                    is HttpResponseResult.Error -> {
-                        logger.warn("Failed to drop deployment $deploymentId: HTTP ${result.httpStatus}, Response: ${result.data}")
-                    }
-
-                    is HttpResponseResult.UnexpectedError -> {
-                        logger.warn("Failed to drop deployment $deploymentId: ${result.cause.message}")
-                    }
-                }
-            } catch (e: InterruptedException) {
-                Thread.currentThread().interrupt()
-                logger.warn("Interrupted while dropping deployment $deploymentId")
-            } catch (e: Exception) {
-                logger.warn("Failed to drop deployment $deploymentId: ${e.message}")
-            }
+            client.tryDropDeployment(creds, deploymentId, logger)
         }
     }
 
