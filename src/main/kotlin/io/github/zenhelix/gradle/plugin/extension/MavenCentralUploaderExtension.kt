@@ -36,8 +36,34 @@ public open class MavenCentralUploaderExtension @Inject constructor(objects: Obj
     }
 }
 
-//TODO BearerToken
-public open class MavenCentralUploaderCredentialExtension @Inject constructor(objects: ObjectFactory) {
+public open class MavenCentralUploaderCredentialExtension @Inject constructor(private val objects: ObjectFactory) {
+
+    private var bearerConfigured: Boolean = false
+    private var usernamePasswordConfigured: Boolean = false
+
+    public val bearer: BearerCredentialExtension = objects.newInstance<BearerCredentialExtension>()
+    public val usernamePassword: UsernamePasswordCredentialExtension =
+        objects.newInstance<UsernamePasswordCredentialExtension>()
+
+    public fun bearer(configure: Action<BearerCredentialExtension>) {
+        bearerConfigured = true
+        configure.execute(bearer)
+    }
+
+    public fun usernamePassword(configure: Action<UsernamePasswordCredentialExtension>) {
+        usernamePasswordConfigured = true
+        configure.execute(usernamePassword)
+    }
+
+    public val isBearerConfigured: Boolean get() = bearerConfigured
+    public val isUsernamePasswordConfigured: Boolean get() = usernamePasswordConfigured
+}
+
+public open class BearerCredentialExtension @Inject constructor(objects: ObjectFactory) {
+    public val token: Property<String> = objects.property<String>()
+}
+
+public open class UsernamePasswordCredentialExtension @Inject constructor(objects: ObjectFactory) {
     public val username: Property<String> = objects.property<String>()
     public val password: Property<String> = objects.property<String>()
 }
