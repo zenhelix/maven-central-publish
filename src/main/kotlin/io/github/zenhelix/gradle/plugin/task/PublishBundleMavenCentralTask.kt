@@ -138,6 +138,11 @@ public abstract class PublishBundleMavenCentralTask @Inject constructor(
                                 )
                             }
                             throw e
+                        } catch (e: GradleException) {
+                            // Status check HTTP error or parse failure — deployment state unknown,
+                            // attempt drop as best-effort (tryDropDeployment never throws)
+                            tryDropDeployment(apiClient, creds, deploymentId)
+                            throw e
                         }
                     }
 

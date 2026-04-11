@@ -159,6 +159,23 @@ class PublishBundleDropBehaviorTest {
     }
 
     @Test
+    fun `should attempt drop when status check returns HTTP error`() {
+        // Status check fails with HTTP error (server temporarily down)
+        // The deployment state is unknown, so drop should be attempted as best-effort
+        every { mockClient.deploymentStatus(any(), any()) } returns HttpResponseResult.Error(
+            data = "Service Unavailable",
+            httpStatus = 503
+        )
+        every { mockClient.dropDeployment(any(), any()) } returns HttpResponseResult.Success(Unit)
+
+        assertThatThrownBy { executePublishTask() }
+            .isInstanceOf(GradleException::class.java)
+            .hasMessageContaining("Failed to check deployment status")
+
+        verify(exactly = 1) { mockClient.dropDeployment(any(), eq(deploymentId)) }
+    }
+
+    @Test
     fun `should succeed for USER_MANAGED when deployment reaches VALIDATED state`() {
         every { mockClient.deploymentStatus(any(), any()) } returns statusReturning(DeploymentStateType.VALIDATED)
 

@@ -104,6 +104,9 @@ public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
                     if (effectiveType != requestedType) {
                         publishAllDeployments(client, creds, deploymentIds)
                     }
+                } catch (e: DeploymentsAlreadyCleanedUpException) {
+                    // handlePublishFailure already dropped unpublished deployments — just rethrow
+                    throw e
                 } catch (e: Exception) {
                     val droppableIds = deploymentIds.filter { id ->
                         val state = lastKnownStates[id]
@@ -303,7 +306,7 @@ public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
         val unpublished = deploymentIds.filter { it !in publishedIds && it != failedId }
         dropAllDeployments(client, creds, unpublished)
 
-        throw GradleException(
+        throw DeploymentsAlreadyCleanedUpException(
             "$message WARNING: ${publishedIds.size} deployment(s) may already be published " +
                     "and cannot be rolled back (API limitation). " +
                     "Dropped ${unpublished.size} remaining unpublished deployment(s).",
@@ -345,3 +348,11 @@ public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
         }
     }
 }
+
+/**
+ * Signals that [handlePublishFailure] already performed cleanup (dropped unpublished deployments).
+ * The outer catch block should NOT attempt additional drops when it sees this exception.
+ */
+internal class DeploymentsAlreadyCleanedUpException(
+    message: String, cause: Exception?
+) : GradleException(message, cause)

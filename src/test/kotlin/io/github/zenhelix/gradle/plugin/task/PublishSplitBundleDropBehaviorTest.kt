@@ -99,6 +99,46 @@ class PublishSplitBundleDropBehaviorTest {
     }
 
     @Test
+    fun `should not double-drop when publishAllDeployments fails after validation`() {
+        // Scenario: split bundle with 2 chunks, both validated,
+        // then publish of chunk 2 fails → handlePublishFailure drops chunk 1,
+        // outer catch should NOT drop again
+        val bundlesDir = createBundleFiles(2)
+        val id1 = UUID.fromString("11111111-1111-1111-1111-111111111111")
+        val id2 = UUID.fromString("22222222-2222-2222-2222-222222222222")
+
+        var uploadCount = 0
+        every { mockClient.uploadDeploymentBundle(any(), any(), any(), any()) } answers {
+            uploadCount++
+            HttpResponseResult.Success(if (uploadCount == 1) id1 else id2)
+        }
+
+        // Both validated successfully
+        every { mockClient.deploymentStatus(any(), eq(id1)) } returns HttpResponseResult.Success(
+            DeploymentStatus(id1, "test", DeploymentStateType.VALIDATED, null, null)
+        )
+        every { mockClient.deploymentStatus(any(), eq(id2)) } returns HttpResponseResult.Success(
+            DeploymentStatus(id2, "test", DeploymentStateType.VALIDATED, null, null)
+        )
+
+        // Publish id1 succeeds, publish id2 fails
+        every { mockClient.publishDeployment(any(), eq(id1)) } returns HttpResponseResult.Success(Unit)
+        every { mockClient.publishDeployment(any(), eq(id2)) } returns HttpResponseResult.Error(
+            data = "Internal error", httpStatus = 500
+        )
+        every { mockClient.dropDeployment(any(), any()) } returns HttpResponseResult.Success(Unit)
+
+        assertThatThrownBy { executePublishSplitTask(bundlesDir) }
+            .isInstanceOf(DeploymentsAlreadyCleanedUpException::class.java)
+
+        // handlePublishFailure should NOT drop id1 (already published) or id2 (the failed one)
+        // It should only drop remaining unpublished deployments (none in this case —
+        // id1 is published, id2 is the failed one)
+        // The key assertion: drop should NOT be called for id1 (already published)
+        verify(exactly = 0) { mockClient.dropDeployment(any(), eq(id1)) }
+    }
+
+    @Test
     fun `should succeed when single deployment reaches PUBLISHED state`() {
         val bundlesDir = createBundleFiles(1)
 
