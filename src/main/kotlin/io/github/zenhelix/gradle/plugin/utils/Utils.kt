@@ -32,7 +32,7 @@ internal fun MavenPublicationInternal.mapModel(
             }
         })
     },
-    checksumTask = checksumTask
+    checksumFiles = checksumTask.flatMap { it.checksumFiles }
 )
 
 internal fun PublishingType.mapModel(): io.github.zenhelix.gradle.plugin.client.model.PublishingType = when (this) {

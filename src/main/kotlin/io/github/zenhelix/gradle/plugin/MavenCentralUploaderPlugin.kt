@@ -117,7 +117,7 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
 
             val zipTask = project.registerZipPublicationTask(publicationName) {
                 dependsOn(taskDependencies)
-                publicationInfo.checksumTask?.also { dependsOn(it) }
+                dependsOn(checksumTask)
 
                 this.publications.add(publicationInfo)
 

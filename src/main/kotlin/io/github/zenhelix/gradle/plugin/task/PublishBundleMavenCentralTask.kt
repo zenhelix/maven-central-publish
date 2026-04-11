@@ -14,7 +14,6 @@ import org.gradle.api.GradleException
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.model.ObjectFactory
 import org.gradle.api.provider.Property
-import org.gradle.api.provider.Provider
 import org.gradle.api.publish.plugins.PublishingPlugin.PUBLISH_TASK_GROUP
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputFile
@@ -90,15 +89,8 @@ public abstract class PublishBundleMavenCentralTask @Inject constructor(
     public abstract val statusCheckDelay: Property<Duration>
 
     /**
-     * Internal provider for the API client.
-     */
-    @get:Internal
-    protected open val apiClient: Provider<MavenCentralApiClient> = baseUrl.map { url ->
-        createApiClient(url)
-    }
-
-    /**
-     * Protected method to create API client - can be overridden for testing
+     * Creates the API client. Called at execution time (not configuration time)
+     * to avoid configuration cache serialization issues with HttpClient.
      */
     protected open fun createApiClient(url: String): MavenCentralApiClient {
         return if (url.equals("http://test", ignoreCase = true)) {
@@ -123,7 +115,7 @@ public abstract class PublishBundleMavenCentralTask @Inject constructor(
 
         val bundleFile = zipFile.asFile.get()
         val creds = credentials.get()
-        val client = apiClient.get()
+        val client = createApiClient(baseUrl.get())
         val type = publishingType.orNull
         val name = deploymentName.orNull
         val maxChecks = maxStatusChecks.get()

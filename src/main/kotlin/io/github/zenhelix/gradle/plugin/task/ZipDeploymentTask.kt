@@ -27,8 +27,8 @@ public abstract class ZipDeploymentTask : Zip() {
     }
 
     public fun configureContentFor(info: PublicationInfo) {
-        info.checksumTask?.let { checksumTask ->
-            from(checksumTask.flatMap { it.checksumFiles }) {
+        info.checksumFiles?.let { files ->
+            from(files) {
                 into(info.artifactPath)
             }
         }
