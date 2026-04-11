@@ -126,9 +126,21 @@ internal fun File.moduleBundleFile(
     .distributionsDirectory(gradleModuleName = gradleModuleName)
     .moduleBundlePath(moduleName = moduleName, version = version, publicationName = publicationName)
 
+internal fun File.moduleSplitBundleFile(
+    moduleName: String, version: String,
+    publicationName: String? = null,
+    chunkNumber: Int = 1
+): Path = this
+    .splitBundlesDirectory()
+    .moduleSplitBundlePath(moduleName = moduleName, version = version, publicationName = publicationName, chunkNumber = chunkNumber)
+
 internal fun Path.moduleBundlePath(
     moduleName: String, version: String, publicationName: String? = null
 ): Path = this.resolve("$moduleName-${publicationName?.let { "$it-" } ?: ""}$version.zip")
+
+internal fun Path.moduleSplitBundlePath(
+    moduleName: String, version: String, publicationName: String? = null, chunkNumber: Int = 1
+): Path = this.resolve("$moduleName-${publicationName?.let { "$it-" } ?: ""}$version-$chunkNumber.zip")
 
 internal fun File.buildDirectory(
     gradleModuleName: String? = null, buildDirectory: String = "build"
@@ -139,3 +151,7 @@ internal fun File.distributionsDirectory(
     gradleModuleName: String? = null,
     buildDirectory: String = "build", distributionsDirectory: String = "distributions"
 ): Path = this.buildDirectory(gradleModuleName, buildDirectory).resolve(distributionsDirectory)
+
+internal fun File.splitBundlesDirectory(
+    buildDirectory: String = "build", splitBundlesDir: String = "maven-central-split-bundles"
+): Path = this.buildDirectory(buildDirectory = buildDirectory).resolve(splitBundlesDir)

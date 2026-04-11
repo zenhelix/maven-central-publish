@@ -16,10 +16,13 @@ import test.group
 import test.mavenCentralPortal
 import test.moduleBundleFile
 import test.moduleBundlePath
+import test.moduleSplitBundleFile
+import test.moduleSplitBundlePath
 import test.pom
 import test.settings
 import test.settingsGradleFile
 import test.signing
+import test.splitBundlesDirectory
 import test.testkit.BuildOutputAssert
 import test.testkit.DirectoryAssert
 import test.testkit.GradleDryRunOutputAssert
@@ -370,11 +373,11 @@ class MavenCentralUploaderPluginFunctionalTest {
             withTask("zipDeploymentAllModules")
         }
 
-        DirectoryAssert.assertThat(testProjectDir.distributionsDirectory()).containsExactlyFiles(
-            Path.of("").moduleBundlePath("test-library", version, "allModules").toString()
+        DirectoryAssert.assertThat(testProjectDir.splitBundlesDirectory()).containsExactlyFiles(
+            Path.of("").moduleSplitBundlePath("test-library", version, "allModules").toString()
         )
         assertThat(
-            ZipFile(testProjectDir.moduleBundleFile(null, "test-library", version, "allModules").toFile())
+            ZipFile(testProjectDir.moduleSplitBundleFile("test-library", version, "allModules").toFile())
         ).containsMavenArtifacts("test.zenhelix", "test-library", version) {
             standardJavaLibrary(module1)
             standardJavaLibrary(module2)
@@ -489,12 +492,12 @@ class MavenCentralUploaderPluginFunctionalTest {
             withTask("zipDeploymentAllModules")
         }
 
-        DirectoryAssert.assertThat(testProjectDir.distributionsDirectory()).containsExactlyFiles(
-            Path.of("").moduleBundlePath("test-project", version, "allModules").toString()
+        DirectoryAssert.assertThat(testProjectDir.splitBundlesDirectory()).containsExactlyFiles(
+            Path.of("").moduleSplitBundlePath("test-project", version, "allModules").toString()
         )
 
         assertThat(
-            ZipFile(testProjectDir.moduleBundleFile(null, "test-project", version, "allModules").toFile())
+            ZipFile(testProjectDir.moduleSplitBundleFile("test-project", version, "allModules").toFile())
         ).containsSomeMavenArtifacts("test.zenhelix", module1, version) {
             standardJavaLibrary()
         }.containsSomeMavenArtifacts("test.zenhelix", "$module1-test-fixtures", version) {
@@ -665,8 +668,8 @@ class MavenCentralUploaderPluginFunctionalTest {
             withTask("zipDeploymentAllModules")
         }
 
-        DirectoryAssert.assertThat(testProjectDir.distributionsDirectory()).containsExactlyFiles(
-            Path.of("").moduleBundlePath("my-library", version, "allModules").toString()
+        DirectoryAssert.assertThat(testProjectDir.splitBundlesDirectory()).containsExactlyFiles(
+            Path.of("").moduleSplitBundlePath("my-library", version, "allModules").toString()
         )
         DirectoryAssert.assertThat(testProjectDir.distributionsDirectory(module1)).doesNotExist()
         DirectoryAssert.assertThat(testProjectDir.distributionsDirectory(module2)).doesNotExist()
@@ -962,10 +965,10 @@ class MavenCentralUploaderPluginFunctionalTest {
             withTask("publish")
         }
 
-        // Only ONE publishing log: the aggregated bundle, not per-subproject
+        // Only ONE uploading chunk log: the aggregated bundle, not per-subproject
         BuildOutputAssert.assertThat(result.output)
-            .containsPublishingLogCount(1)
-            .containsPublishingLog("test-library-allModules-$version.zip", "AUTOMATIC", null)
+            .containsUploadingChunkLogCount(1)
+            .containsUploadingChunkLog("test-library-allModules-$version-1.zip")
     }
 
     @Test
@@ -1103,15 +1106,15 @@ class MavenCentralUploaderPluginFunctionalTest {
         }
 
         BuildOutputAssert.assertThat(result.output)
-            .containsPublishingLogCount(1)
-            .containsPublishingLog("bom-library-allModules-$version.zip", "AUTOMATIC", null)
+            .containsUploadingChunkLogCount(1)
+            .containsUploadingChunkLog("bom-library-allModules-$version-1.zip")
 
-        DirectoryAssert.assertThat(testProjectDir.distributionsDirectory()).containsExactlyFiles(
-            Path.of("").moduleBundlePath("bom-library", version, "allModules").toString()
+        DirectoryAssert.assertThat(testProjectDir.splitBundlesDirectory()).containsExactlyFiles(
+            Path.of("").moduleSplitBundlePath("bom-library", version, "allModules").toString()
         )
 
         assertThat(
-            ZipFile(testProjectDir.moduleBundleFile(null, "bom-library", version, "allModules").toFile())
+            ZipFile(testProjectDir.moduleSplitBundleFile("bom-library", version, "allModules").toFile())
         ).containsSomeMavenArtifacts("test.zenhelix", "bom-library", version) {
             gradlePlatform()
         }.containsSomeMavenArtifacts("test.zenhelix", module1, version) {

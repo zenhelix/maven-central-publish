@@ -219,6 +219,13 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
 
             allPublicationsInfo.addAll(rootPublicationInfos.values)
             allChecksumsAndBuildTasks.addAll(rootTaskDependencies.values)
+
+            // Also add the root project's checksum tasks so they run before zipDeploymentAllModules
+            rootPublications.forEach { publication ->
+                rootProject.tasks.findByName("checksum${publication.name.capitalized()}Publication")?.let {
+                    allChecksumsAndBuildTasks.add(it)
+                }
+            }
         }
 
         // Process subprojects
