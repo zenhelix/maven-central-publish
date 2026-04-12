@@ -70,7 +70,10 @@ public abstract class PublishBundleMavenCentralTask @Inject constructor(
 
     @TaskAction
     public fun publishBundle() {
-        validateInputs()?.let { throw it.toGradleException() }
+        validateInputs().fold(
+            onSuccess = {},
+            onFailure = { throw it.toGradleException() }
+        )
 
         val creds = credentials.get().fold(
             onSuccess = { it },
@@ -113,19 +116,19 @@ public abstract class PublishBundleMavenCentralTask @Inject constructor(
         }
     }
 
-    private fun validateInputs(): ValidationError? {
-        if (!zipFile.isPresent) return ValidationError.MissingProperty("zipFile")
-        if (!credentials.isPresent) return ValidationError.MissingProperty("credentials")
+    private fun validateInputs(): Outcome<Unit, ValidationError> {
+        if (!zipFile.isPresent) return Failure(ValidationError.MissingProperty("zipFile"))
+        if (!credentials.isPresent) return Failure(ValidationError.MissingProperty("credentials"))
 
         val file = zipFile.asFile.get()
-        if (!file.exists()) return ValidationError.InvalidFile(file.absolutePath, "Bundle file does not exist")
-        if (!file.isFile) return ValidationError.InvalidFile(file.absolutePath, "Bundle path is not a file")
-        if (file.length() == 0L) return ValidationError.InvalidFile(file.absolutePath, "Bundle file is empty")
+        if (!file.exists()) return Failure(ValidationError.InvalidFile(file.absolutePath, "Bundle file does not exist"))
+        if (!file.isFile) return Failure(ValidationError.InvalidFile(file.absolutePath, "Bundle path is not a file"))
+        if (file.length() == 0L) return Failure(ValidationError.InvalidFile(file.absolutePath, "Bundle file is empty"))
 
         val maxChecks = maxStatusChecks.get()
-        if (maxChecks < 1) return ValidationError.InvalidValue("maxStatusChecks", "must be at least 1, got: $maxChecks")
+        if (maxChecks < 1) return Failure(ValidationError.InvalidValue("maxStatusChecks", "must be at least 1, got: $maxChecks"))
 
-        return null
+        return Success(Unit)
     }
 
     private fun waitForDeploymentCompletion(

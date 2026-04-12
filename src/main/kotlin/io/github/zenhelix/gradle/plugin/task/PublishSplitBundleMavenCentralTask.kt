@@ -69,7 +69,10 @@ public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
 
     @TaskAction
     public fun publishBundles() {
-        validateInputs()?.let { throw it.toGradleException() }
+        validateInputs().fold(
+            onSuccess = {},
+            onFailure = { throw it.toGradleException() }
+        )
 
         val creds = credentials.get().fold(
             onSuccess = { it },
@@ -310,17 +313,17 @@ public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
         return Success(Unit)
     }
 
-    private fun validateInputs(): ValidationError? {
-        if (!bundlesDirectory.isPresent) return ValidationError.MissingProperty("bundlesDirectory")
-        if (!credentials.isPresent) return ValidationError.MissingProperty("credentials")
+    private fun validateInputs(): Outcome<Unit, ValidationError> {
+        if (!bundlesDirectory.isPresent) return Failure(ValidationError.MissingProperty("bundlesDirectory"))
+        if (!credentials.isPresent) return Failure(ValidationError.MissingProperty("credentials"))
 
         val dir = bundlesDirectory.asFile.get()
-        if (!dir.exists()) return ValidationError.InvalidFile(dir.absolutePath, "Bundles directory does not exist")
-        if (!dir.isDirectory) return ValidationError.InvalidFile(dir.absolutePath, "Bundles path is not a directory")
+        if (!dir.exists()) return Failure(ValidationError.InvalidFile(dir.absolutePath, "Bundles directory does not exist"))
+        if (!dir.isDirectory) return Failure(ValidationError.InvalidFile(dir.absolutePath, "Bundles path is not a directory"))
 
         val maxChecks = maxStatusChecks.get()
-        if (maxChecks < 1) return ValidationError.InvalidValue("maxStatusChecks", "must be at least 1, got: $maxChecks")
+        if (maxChecks < 1) return Failure(ValidationError.InvalidValue("maxStatusChecks", "must be at least 1, got: $maxChecks"))
 
-        return null
+        return Success(Unit)
     }
 }
