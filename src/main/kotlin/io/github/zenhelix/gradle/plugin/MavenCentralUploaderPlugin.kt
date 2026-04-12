@@ -235,8 +235,10 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
     private fun collectAggregationData(
         rootProject: Project
     ): Pair<List<PublicationInfo>, List<Any>> {
+        val rootPublications = rootProject.findMavenPublications()
+        val subprojectPublications = rootProject.subprojects.associateWith { it.findMavenPublications() }
+
         val allPublicationsInfo = buildList {
-            val rootPublications = rootProject.findMavenPublications()
             if (!rootPublications.isNullOrEmpty()) {
                 rootPublications.forEach { publication ->
                     val checksumTaskName = "checksum${publication.name.capitalized()}Publication"
@@ -247,8 +249,8 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
                 }
             }
 
-            rootProject.subprojects.forEach { subproject ->
-                subproject.findMavenPublications()?.forEach { publication ->
+            subprojectPublications.forEach { (subproject, publications) ->
+                publications?.forEach { publication ->
                     val checksumTaskName = "checksum${publication.name.capitalized()}Publication"
                     val checksumTask = subproject.tasks.findByName(checksumTaskName)
                     if (checksumTask is CreateChecksumTask) {
@@ -262,7 +264,6 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
         }
 
         val allChecksumsAndBuildTasks = buildList<Any> {
-            val rootPublications = rootProject.findMavenPublications()
             if (!rootPublications.isNullOrEmpty()) {
                 rootPublications.forEach { publication ->
                     val deps = rootProject.objects.listProperty<TaskDependency>().apply {
@@ -276,10 +277,10 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
                 }
             }
 
-            rootProject.subprojects.forEach { subproject ->
+            subprojectPublications.forEach { (subproject, publications) ->
                 subproject.tasks.findByName("checksumAllPublications")?.let { add(it) }
 
-                subproject.findMavenPublications()?.forEach { publication ->
+                publications?.forEach { publication ->
                     val deps = subproject.objects.listProperty<TaskDependency>().apply {
                         publication.allPublishableArtifacts { this@apply.addAll(buildDependencies) }
                     }

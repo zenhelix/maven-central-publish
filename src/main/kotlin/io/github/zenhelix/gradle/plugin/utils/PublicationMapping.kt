@@ -1,5 +1,6 @@
 package io.github.zenhelix.gradle.plugin.utils
 
+import io.github.zenhelix.gradle.plugin.client.model.PublishingType
 import io.github.zenhelix.gradle.plugin.extension.PublishingMode
 import io.github.zenhelix.gradle.plugin.task.ArtifactFileInfo
 import io.github.zenhelix.gradle.plugin.task.ArtifactInfo
@@ -28,7 +29,7 @@ internal fun MavenPublicationInternal.mapModel(
     checksumFiles = checksumTask.flatMap { it.checksumFiles }
 )
 
-internal fun PublishingMode.mapModel(): io.github.zenhelix.gradle.plugin.client.model.PublishingType = when (this) {
-    PublishingMode.AUTOMATIC -> io.github.zenhelix.gradle.plugin.client.model.PublishingType.AUTOMATIC
-    PublishingMode.USER_MANAGED -> io.github.zenhelix.gradle.plugin.client.model.PublishingType.USER_MANAGED
+internal fun PublishingMode.mapModel(): PublishingType = when (this) {
+    PublishingMode.AUTOMATIC -> PublishingType.AUTOMATIC
+    PublishingMode.USER_MANAGED -> PublishingType.USER_MANAGED
 }
