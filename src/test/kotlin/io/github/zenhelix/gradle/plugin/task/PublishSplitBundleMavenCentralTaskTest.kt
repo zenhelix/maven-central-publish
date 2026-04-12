@@ -66,7 +66,7 @@ class PublishSplitBundleMavenCentralTaskTest {
     }
 
     @Test
-    fun `multiple bundles with AUTOMATIC type will switch to USER_MANAGED`() {
+    fun `multiple bundles with AUTOMATIC type should keep AUTOMATIC at configuration time`() {
         createZipFile("project-1.zip")
         createZipFile("project-2.zip")
 
@@ -79,7 +79,9 @@ class PublishSplitBundleMavenCentralTaskTest {
             bundlesDirectory.set(File(projectDir, "bundles"))
         }.get()
 
-        // Verify task is configured as AUTOMATIC - mode switching happens at execution time
+        // Mode switching happens at execution time in executePublishing(),
+        // not at configuration time. This test only verifies configuration.
+        // See PublishSplitBundleDropBehaviorTest for execution-time behavior.
         assertThat(task.publishingType.get()).isEqualTo(PublishingType.AUTOMATIC)
     }
 }
