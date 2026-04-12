@@ -21,7 +21,6 @@ import org.gradle.api.NamedDomainObjectCollection
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.Task
-import org.gradle.api.provider.ListProperty
 import org.gradle.api.publish.maven.internal.publication.MavenPublicationInternal
 import org.gradle.api.publish.maven.plugins.MavenPublishPlugin
 import org.gradle.api.tasks.TaskDependency
@@ -209,64 +208,7 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
     }
 
     private fun createAggregationTasks(rootProject: Project, extension: MavenCentralUploaderExtension) {
-        val allPublicationsInfo = mutableListOf<PublicationInfo>()
-        val allChecksumsAndBuildTasks = mutableListOf<Any>()
-
-        // Process root project publications if any
-        val rootPublications = rootProject.findMavenPublications()
-        if (!rootPublications.isNullOrEmpty()) {
-            val rootTaskDependencies: Map<String, ListProperty<TaskDependency>> =
-                rootPublications.associateBy({ it.name }) { publication ->
-                    rootProject.objects.listProperty<TaskDependency>().apply {
-                        publication.allPublishableArtifacts { this@apply.addAll(buildDependencies) }
-                    }
-                }
-
-            val rootPublicationInfos = rootPublications.associateWith { publication ->
-                publication.mapModel(
-                    rootProject,
-                    rootProject.tasks.named<CreateChecksumTask>("checksum${publication.name.capitalized()}Publication")
-                )
-            }
-
-            allPublicationsInfo.addAll(rootPublicationInfos.values)
-            allChecksumsAndBuildTasks.addAll(rootTaskDependencies.values)
-
-            // Also add the root project's checksum tasks so they run before zipDeploymentAllModules
-            rootPublications.forEach { publication ->
-                rootProject.tasks.findByName("checksum${publication.name.capitalized()}Publication")?.let {
-                    allChecksumsAndBuildTasks.add(it)
-                }
-            }
-        }
-
-        // Process subprojects
-        rootProject.subprojects.forEach { subproject ->
-            subproject.tasks.findByName("checksumAllPublications")?.let { checksumTask ->
-                allChecksumsAndBuildTasks.add(checksumTask)
-            }
-
-            val publications = subproject.findMavenPublications()
-            publications?.forEach { publication ->
-                val publicationDependencies = subproject.objects.listProperty<TaskDependency>().apply {
-                    publication.allPublishableArtifacts { this@apply.addAll(buildDependencies) }
-                }
-                allChecksumsAndBuildTasks.add(publicationDependencies)
-
-                val checksumTask = subproject.tasks.findByName("checksum${publication.name.capitalized()}Publication")
-
-                if (checksumTask is CreateChecksumTask) {
-                    val publicationInfo = publication.mapModel(
-                        subproject,
-                        subproject.tasks.named(
-                            "checksum${publication.name.capitalized()}Publication",
-                            CreateChecksumTask::class.java
-                        )
-                    )
-                    allPublicationsInfo.add(publicationInfo)
-                }
-            }
-        }
+        val (allPublicationsInfo, allChecksumsAndBuildTasks) = collectAggregationData(rootProject)
 
         if (allPublicationsInfo.isNotEmpty()) {
             val splitZipTask = rootProject.registerSplitZipAllModulesTask {
@@ -288,6 +230,65 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
                 bundlesDirectory.set(splitZipTask.flatMap { it.outputDirectory })
             }
         }
+    }
+
+    private fun collectAggregationData(
+        rootProject: Project
+    ): Pair<List<PublicationInfo>, List<Any>> {
+        val allPublicationsInfo = buildList {
+            val rootPublications = rootProject.findMavenPublications()
+            if (!rootPublications.isNullOrEmpty()) {
+                rootPublications.forEach { publication ->
+                    val checksumTaskName = "checksum${publication.name.capitalized()}Publication"
+                    add(publication.mapModel(
+                        rootProject,
+                        rootProject.tasks.named<CreateChecksumTask>(checksumTaskName)
+                    ))
+                }
+            }
+
+            rootProject.subprojects.forEach { subproject ->
+                subproject.findMavenPublications()?.forEach { publication ->
+                    val checksumTaskName = "checksum${publication.name.capitalized()}Publication"
+                    val checksumTask = subproject.tasks.findByName(checksumTaskName)
+                    if (checksumTask is CreateChecksumTask) {
+                        add(publication.mapModel(
+                            subproject,
+                            subproject.tasks.named(checksumTaskName, CreateChecksumTask::class.java)
+                        ))
+                    }
+                }
+            }
+        }
+
+        val allChecksumsAndBuildTasks = buildList<Any> {
+            val rootPublications = rootProject.findMavenPublications()
+            if (!rootPublications.isNullOrEmpty()) {
+                rootPublications.forEach { publication ->
+                    val deps = rootProject.objects.listProperty<TaskDependency>().apply {
+                        publication.allPublishableArtifacts { this@apply.addAll(buildDependencies) }
+                    }
+                    add(deps)
+
+                    rootProject.tasks.findByName("checksum${publication.name.capitalized()}Publication")?.let {
+                        add(it)
+                    }
+                }
+            }
+
+            rootProject.subprojects.forEach { subproject ->
+                subproject.tasks.findByName("checksumAllPublications")?.let { add(it) }
+
+                subproject.findMavenPublications()?.forEach { publication ->
+                    val deps = subproject.objects.listProperty<TaskDependency>().apply {
+                        publication.allPublishableArtifacts { this@apply.addAll(buildDependencies) }
+                    }
+                    add(deps)
+                }
+            }
+        }
+
+        return allPublicationsInfo to allChecksumsAndBuildTasks
     }
 
     private fun Project.createExtension(
