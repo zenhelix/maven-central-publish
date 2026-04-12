@@ -269,13 +269,9 @@ public class MavenCentralApiClientImpl(
     private fun isRetriableStatus(statusCode: Int): Boolean =
         statusCode >= 500 || statusCode == HTTP_TOO_MANY_REQUESTS
 
-    private fun isRetriableException(e: Exception): Boolean = when (e) {
-        is HttpTimeoutException -> true
-        is java.net.ConnectException -> true
-        is java.net.SocketTimeoutException -> true
-        is java.io.IOException -> true
-        else -> false
-    }
+    private fun isRetriableException(e: Exception): Boolean =
+        e is HttpTimeoutException || e is java.net.ConnectException ||
+        e is java.net.SocketTimeoutException || e is java.io.IOException
 
     private fun parseDeploymentStatus(json: String): DeploymentStatus? = try {
         objectMapper.readValue<DeploymentStatusDto>(json).toModel()
@@ -284,17 +280,13 @@ public class MavenCentralApiClientImpl(
         null
     }
 
-    private fun buildQueryString(vararg params: Pair<String, String?>): String {
-        val query = params
-            .filter { it.second != null }
-            .joinToString("&") { "${it.first}=${urlEncode(it.second!!)}" }
-
-        return if (query.isNotEmpty()) {
-            "?$query"
-        } else {
-            ""
-        }
-    }
+    private fun buildQueryString(vararg params: Pair<String, String?>): String =
+        params
+            .mapNotNull { (key, value) -> value?.let { "$key=${urlEncode(it)}" } }
+            .joinToString("&")
+            .takeIf { it.isNotEmpty() }
+            ?.let { "?$it" }
+            .orEmpty()
 
     private fun urlEncode(value: String): String = URLEncoder.encode(value, UTF_8)
 
