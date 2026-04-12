@@ -22,10 +22,13 @@ Plugin applies `maven-publish` and `signing` plugins automatically, then extends
 
 * Creates checksum files (MD5, SHA1, SHA256, SHA512) for all artifacts
 * Packages artifacts, signatures, and checksums into deployment bundles (ZIP)
-* Uploads bundles via Publisher API
+* Automatically splits large bundles into chunks (configurable max size, default 256 MB)
+* Uploads bundles via Publisher API with configurable timeouts
 * Polls deployment status until completion
 * Automatically drops deployment on failure or timeout
-* Retries on HTTP 429 (Too Many Requests) with exponential backoff
+* Retries on HTTP 429 (Too Many Requests) and 5xx errors with exponential backoff
+* Auto-registers `javadocJar` and `sourcesJar` tasks (uses Dokka output if available)
+* Provides POM metadata DSL with license presets (`apache2()`, `mit()`, `bsd2()`, `bsd3()`) and `scm { fromGithub() }` shortcut
 
 Supports both single-module and multi-module projects with automatic aggregation.
 Works with late-configured publications (Kotlin Multiplatform, Android Gradle Plugin) that register publications in `afterEvaluate`.
@@ -36,18 +39,44 @@ Works with late-configured publications (Kotlin Multiplatform, Android Gradle Pl
 ----
 mavenCentralPortal {
     credentials {
-        username = providers.gradleProperty("mavenCentralUsername")
-        password = providers.gradleProperty("mavenCentralPassword")
+        bearer { token = providers.environmentVariable("MAVEN_TOKEN") }
+        // OR
+        usernamePassword {
+            username = providers.environmentVariable("MAVEN_USERNAME")
+            password = providers.environmentVariable("MAVEN_PASSWORD")
+        }
     }
-    publishingType = PublishingType.AUTOMATIC
+    publishingType = PublishingMode.AUTOMATIC
     deploymentName = "my-deployment"
 
     uploader {
         maxStatusChecks = 20
         statusCheckDelay = Duration.ofSeconds(10)
+        maxBundleSize = 256.megabytes
+        requestTimeout = Duration.ofMinutes(5)
+        connectTimeout = Duration.ofSeconds(30)
+        maxRetries = 3
+        retryBaseDelay = Duration.ofSeconds(2)
     }
+
+    pom {
+        name.set("My Library")
+        description.set("Library description")
+        url.set("https://github.com/user/repo")
+        license { apache2() }
+        developer {
+            id.set("userid")
+            name.set("User Name")
+            email.set("user@example.com")
+        }
+        scm { fromGithub("user", "repo") }
+    }
+
+    autoConfigureJars = true
 }
 ----
+
+=== Plugin Properties
 
 [cols="1,3"]
 |===
@@ -57,20 +86,46 @@ mavenCentralPortal {
 |Maven Central Portal API base URL +
 Default: `https://central.sonatype.com`
 
-|`credentials.username`
-|Maven Central username or token username
-
-|`credentials.password`
-|Maven Central password or token password
-
 |`publishingType`
-|`AUTOMATIC` - auto-publish after validation +
-`USER_MANAGED` - manual publish via Portal UI +
+|`PublishingMode.AUTOMATIC` - auto-publish after validation +
+`PublishingMode.USER_MANAGED` - manual publish via Portal UI +
 Default: `AUTOMATIC`
 
 |`deploymentName`
 |Optional deployment identifier in Portal +
 Default: `null` (auto-generated)
+
+|`autoConfigureJars`
+|Automatically registers `javadocJar` and `sourcesJar` tasks and attaches them to all Maven publications. Uses Dokka output for javadoc if the Dokka plugin is applied. Skipped for Kotlin Multiplatform projects. +
+Default: `true`
+|===
+
+=== Credentials
+
+Exactly one credential mode must be configured — either `bearer` or `usernamePassword`.
+Configuring both will result in a validation error at publish time.
+
+[cols="1,3"]
+|===
+|Property |Description
+
+|`credentials.bearer.token`
+|Bearer token for authentication
+
+|`credentials.usernamePassword.username`
+|Maven Central username or token username
+
+|`credentials.usernamePassword.password`
+|Maven Central password or token password
+|===
+
+Generate tokens at https://central.sonatype.com/account[Maven Central Portal] (User Token section).
+
+=== Uploader Settings
+
+[cols="1,3"]
+|===
+|Property |Description
 
 |`uploader.maxStatusChecks`
 |Max status polling attempts +
@@ -79,9 +134,63 @@ Default: `20`
 |`uploader.statusCheckDelay`
 |Delay between status checks +
 Default: `10 seconds`
+
+|`uploader.maxBundleSize`
+|Maximum size of a single upload bundle. Bundles exceeding this limit are automatically split into smaller chunks. Use `Int.megabytes` or `Int.gigabytes` extension properties for readable values. +
+Default: `256.megabytes`
+
+|`uploader.requestTimeout`
+|Timeout for individual HTTP requests to the Maven Central Portal API +
+Default: `5 minutes`
+
+|`uploader.connectTimeout`
+|Timeout for establishing an HTTP connection +
+Default: `30 seconds`
+
+|`uploader.maxRetries`
+|Maximum retry attempts for retriable HTTP failures (5xx, connection errors) +
+Default: `3`
+
+|`uploader.retryBaseDelay`
+|Base delay between retry attempts (exponential backoff: `baseDelay * 2^(attempt-1)`, capped at 5 minutes) +
+Default: `2 seconds`
 |===
 
-Generate tokens at https://central.sonatype.org/publish/generate-portal-token/[generate-portal-token]
+=== POM Metadata
+
+The `pom { }` block provides a convenient DSL for configuring POM metadata required by Maven Central.
+When configured, these values are automatically applied to all Maven publications.
+
+[cols="1,3"]
+|===
+|Property |Description
+
+|`pom.name`
+|Project name
+
+|`pom.description`
+|Project description
+
+|`pom.url`
+|Project URL
+
+|`pom.inceptionYear`
+|Project inception year
+
+|`pom.license { }`
+|License entry. Supports presets: `apache2()`, `mit()`, `bsd2()`, `bsd3()`. +
+Multiple licenses can be added by calling `license { }` multiple times.
+
+|`pom.developer { }`
+|Developer entry with `id`, `name`, `email`, `url`. +
+Multiple developers can be added by calling `developer { }` multiple times.
+
+|`pom.scm { }`
+|SCM connection info. Supports `fromGithub("owner", "repo")` shortcut. +
+Or set `connection`, `developerConnection`, `url` manually.
+|===
+
+NOTE: If `pom { }` is configured, you don't need to duplicate POM metadata in `publishing { publications { ... pom { } } }`.
 
 == Tasks
 
@@ -144,46 +253,30 @@ To enable this mode, apply the plugin to the root project and configure credenti
 
 [source,kotlin]
 ----
-publishing {
-    repositories {
-        mavenCentralPortal {
-            credentials {
-                username = sonatypeUser
-                password = sonatypePassword
-            }
-        }
+mavenCentralPortal {
+    credentials {
+        bearer { token = providers.environmentVariable("MAVEN_TOKEN") }
     }
+    publishingType = PublishingMode.AUTOMATIC
 
+    pom {
+        name.set("My Library")
+        description.set("Library description")
+        url.set("https://github.com/user/repo")
+        license { apache2() }
+        developer {
+            id.set("userid")
+            name.set("User Name")
+            email.set("user@example.com")
+        }
+        scm { fromGithub("user", "repo") }
+    }
+}
+
+publishing {
     publications {
         create<MavenPublication>("mavenJava") {
             from(components["java"])
-
-            pom {
-                name = "My Library"
-                description = "Library description"
-                url = "https://github.com/user/repo"
-
-                licenses {
-                    license {
-                        name = "Apache License 2.0"
-                        url = "https://www.apache.org/licenses/LICENSE-2.0.txt"
-                    }
-                }
-
-                developers {
-                    developer {
-                        id = "userid"
-                        name = "User Name"
-                        email = "user@example.com"
-                    }
-                }
-
-                scm {
-                    connection = "scm:git:git://github.com/user/repo.git"
-                    developerConnection = "scm:git:ssh://github.com/user/repo.git"
-                    url = "https://github.com/user/repo"
-                }
-            }
         }
     }
 }
@@ -222,14 +315,20 @@ plugins {
     id("io.github.zenhelix.maven-central-publish")
 }
 
-publishing {
-    repositories {
-        mavenCentralPortal {
-            credentials {
-                username = System.getenv("MAVEN_SONATYPE_USERNAME")
-                password = System.getenv("MAVEN_SONATYPE_TOKEN")
-            }
+mavenCentralPortal {
+    credentials {
+        bearer { token = providers.environmentVariable("MAVEN_TOKEN") }
+    }
+
+    pom {
+        url.set("https://github.com/user/repo")
+        license { apache2() }
+        developer {
+            id.set("userid")
+            name.set("User Name")
+            email.set("user@example.com")
         }
+        scm { fromGithub("user", "repo") }
     }
 }
 
@@ -264,8 +363,8 @@ Each subproject publishes independently. For atomic multi-module publishing, als
 
 * Gradle 8.0+
 * Java 17+
-* Valid Maven Central account
-* POM metadata: name, description, url, licenses, developers, scm
+* Valid Maven Central account with a https://central.sonatype.com/account[bearer token] or username/password credentials
+* POM metadata: name, description, url, licenses, developers, scm (can be configured via the `pom { }` DSL)
 * Signed artifacts
 
 == Development
@@ -275,30 +374,24 @@ Each subproject publishes independently. For atomic multi-module publishing, als
 =====
 *CI/CD Pipeline*
 
-The project uses GitHub Actions with workflows generated by https://github.com/typesafegithub/github-workflows-kt[github-workflows-kt].
+The project uses GitHub Actions with reusable workflows from https://github.com/zenhelix/ci-workflows[zenhelix/ci-workflows] v2.
 
-Workflow source files (`.kts`) are located in `.github/workflows/`:
-
-[cols="1,1,2"]
+[cols="1,2"]
 |===
-|Source File |Generated YAML |Purpose
+|Workflow |Purpose
 
-|`workflow.branch.main.kts`
 |`build-on-branch.yml`
-|Runs `check` on pull requests
+|Runs `check` on pull requests and auto-labels PRs based on changed file paths
 
-|`workflow.main.main.kts`
 |`build-on-main.yml`
-|Creates version tag on push to `main` or `*.x` branches
+|Runs `check` and creates version tag on push to `main`
 
-|`workflow.release.main.kts`
 |`release-on-tag.yml`
-|Creates GitHub Release and publishes to Gradle Plugin Portal
-
-|`workflow.labeler.main.kts`
-|`labeler.yml`
-|Automatically labels PRs based on changed file paths
+|Creates GitHub Release and publishes to Gradle Plugin Portal and Maven Central
 |===
+
+PR labeling rules are configured in `.github/labeler.yml`. +
+Changelog categories are configured in `.github/changelog-config.json`.
 
 *Release Flow*
 
@@ -386,18 +479,6 @@ git tag -d 1.0.1
 
 NOTE: Published versions cannot be deleted from Gradle Plugin Portal.
 
-*Regenerating Workflows*
-
-After modifying `.kts` files, regenerate YAML:
-
-[source,bash]
-----
-./.github/workflows/workflow.main.main.kts
-./.github/workflows/workflow.release.main.kts
-./.github/workflows/workflow.branch.main.kts
-./.github/workflows/workflow.labeler.main.kts
-----
-
 *Required Secrets*
 
 [cols="1,2"]
@@ -415,6 +496,12 @@ After modifying `.kts` files, regenerate YAML:
 
 |`GRADLE_PUBLISH_SECRET`
 |Gradle Plugin Portal publish secret
+
+|`MAVEN_SONATYPE_USERNAME`
+|Maven Central username or token username
+
+|`MAVEN_SONATYPE_TOKEN`
+|Maven Central token password
 
 |`MAVEN_SONATYPE_SIGNING_KEY_ID`
 |GPG signing key ID
