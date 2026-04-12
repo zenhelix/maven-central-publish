@@ -6,6 +6,7 @@ import io.github.zenhelix.gradle.plugin.client.createApiClient as createDefaultA
 import io.github.zenhelix.gradle.plugin.client.recovery.tryDropDeployment
 import io.github.zenhelix.gradle.plugin.client.model.Credentials
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentError
+import io.github.zenhelix.gradle.plugin.client.model.HttpStatus
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentId
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentStateType
 import io.github.zenhelix.gradle.plugin.client.model.Failure
@@ -91,7 +92,7 @@ public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
             .orEmpty()
 
         if (bundleFiles.isEmpty()) {
-            return DeploymentError.UploadFailed(0, "No ZIP bundles found in ${bundlesDir.absolutePath}")
+            return DeploymentError.UploadFailed(HttpStatus(0), "No ZIP bundles found in ${bundlesDir.absolutePath}")
         }
 
         val maxChecks = maxStatusChecks.get()
