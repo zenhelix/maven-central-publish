@@ -23,15 +23,11 @@ Plugin applies `maven-publish` and `signing` plugins automatically, then extends
 * Creates checksum files (MD5, SHA1, SHA256, SHA512) for all artifacts
 * Packages artifacts, signatures, and checksums into deployment bundles (ZIP)
 * Automatically splits large bundles into chunks (configurable max size, default 256 MB)
-* Uploads bundles via Publisher API with configurable timeouts
-* Polls deployment status until completion
-* Automatically drops deployment on failure or timeout
-* Retries on HTTP 429 (Too Many Requests) and 5xx errors with exponential backoff
+* Reliably uploads bundles via Publisher API, polls deployment status until completion, and automatically recovers from failures
 * Auto-registers `javadocJar` and `sourcesJar` tasks (uses Dokka output if available)
 * Provides POM metadata DSL with license presets (`apache2()`, `mit()`, `bsd2()`, `bsd3()`) and `scm { fromGithub() }` shortcut
 
 Supports both single-module and multi-module projects with automatic aggregation.
-Works with late-configured publications (Kotlin Multiplatform, Android Gradle Plugin) that register publications in `afterEvaluate`.
 
 == Configuration
 
@@ -48,16 +44,6 @@ mavenCentralPortal {
     }
     publishingType = PublishingMode.AUTOMATIC
     deploymentName = "my-deployment"
-
-    uploader {
-        maxStatusChecks = 20
-        statusCheckDelay = Duration.ofSeconds(10)
-        maxBundleSize = 256.megabytes
-        requestTimeout = Duration.ofMinutes(5)
-        connectTimeout = Duration.ofSeconds(30)
-        maxRetries = 3
-        retryBaseDelay = Duration.ofSeconds(2)
-    }
 
     pom {
         name.set("My Library")
@@ -121,41 +107,6 @@ Configuring both will result in a validation error at publish time.
 
 Generate tokens at https://central.sonatype.com/account[Maven Central Portal] (User Token section).
 
-=== Uploader Settings
-
-[cols="1,3"]
-|===
-|Property |Description
-
-|`uploader.maxStatusChecks`
-|Max status polling attempts +
-Default: `20`
-
-|`uploader.statusCheckDelay`
-|Delay between status checks +
-Default: `10 seconds`
-
-|`uploader.maxBundleSize`
-|Maximum size of a single upload bundle. Bundles exceeding this limit are automatically split into smaller chunks. Use `Int.megabytes` or `Int.gigabytes` extension properties for readable values. +
-Default: `256.megabytes`
-
-|`uploader.requestTimeout`
-|Timeout for individual HTTP requests to the Maven Central Portal API +
-Default: `5 minutes`
-
-|`uploader.connectTimeout`
-|Timeout for establishing an HTTP connection +
-Default: `30 seconds`
-
-|`uploader.maxRetries`
-|Maximum retry attempts for retriable HTTP failures (5xx, connection errors) +
-Default: `3`
-
-|`uploader.retryBaseDelay`
-|Base delay between retry attempts (exponential backoff: `baseDelay * 2^(attempt-1)`, capped at 5 minutes) +
-Default: `2 seconds`
-|===
-
 === POM Metadata
 
 The `pom { }` block provides a convenient DSL for configuring POM metadata required by Maven Central.
@@ -191,61 +142,6 @@ Or set `connection`, `developerConnection`, `url` manually.
 |===
 
 NOTE: If `pom { }` is configured, you don't need to duplicate POM metadata in `publishing { publications { ... pom { } } }`.
-
-== Tasks
-
-Plugin registers tasks per publication and aggregation tasks:
-
-=== Per-Publication Tasks
-
-* `checksum<Publication>Publication` - Generate checksums
-* `zipDeployment<Publication>Publication` - Create ZIP bundle
-* `publish<Publication>PublicationToMavenCentralPortalRepository` - Upload bundle
-
-=== Aggregation Tasks
-
-* `checksumAllPublications` - Generate checksums for all publications
-* `zipDeploymentAllPublications` - Bundle all publications
-* `publishAllPublicationsToMavenCentralPortalRepository` - Upload all publications
-
-=== Multi-Module Tasks
-
-For root project with subprojects:
-
-* `zipDeploymentAllModules` - Bundle all modules
-* `publishAllModulesToMavenCentralPortalRepository` - Upload all modules
-
-== Lifecycle Task Behavior
-
-Plugin integrates with Gradle's `publish` lifecycle task in two modes:
-
-=== Mode 1: Independent Publishing (default)
-
-Each project that applies the plugin publishes its own bundle independently.
-This is the default when the plugin is applied to individual projects (including via convention plugins in `buildSrc`).
-
-[source,bash]
-----
-./gradlew publish
-----
-
-Each project executes its own `publishAllPublicationsToMavenCentralPortalRepository`.
-
-NOTE: When multiple subprojects publish independently, a warning is emitted suggesting atomic aggregation.
-
-=== Mode 2: Atomic Aggregation
-
-When the plugin is applied to the *root project* and subprojects have publications, all modules are aggregated into a single deployment bundle:
-
-[source,bash]
-----
-./gradlew publish
-----
-
-Executes: `publishAllModulesToMavenCentralPortalRepository` (root only).
-Subprojects do not publish independently — one bundle, one deployment, atomic release.
-
-To enable this mode, apply the plugin to the root project and configure credentials there.
 
 == Usage
 
@@ -367,155 +263,112 @@ Each subproject publishes independently. For atomic multi-module publishing, als
 * POM metadata: name, description, url, licenses, developers, scm (can be configured via the `pom { }` DSL)
 * Signed artifacts
 
-== Development
+== Tasks
 
-.Click to expand
-[%collapsible]
-=====
-*CI/CD Pipeline*
+Plugin registers tasks per publication and aggregation tasks:
 
-The project uses GitHub Actions with reusable workflows from https://github.com/zenhelix/ci-workflows[zenhelix/ci-workflows] v2.
+=== Per-Publication Tasks
 
-[cols="1,2"]
+* `checksum<Publication>Publication` - Generate checksums
+* `zipDeployment<Publication>Publication` - Create ZIP bundle
+* `publish<Publication>PublicationToMavenCentralPortalRepository` - Upload bundle
+
+=== Aggregation Tasks
+
+* `checksumAllPublications` - Generate checksums for all publications
+* `zipDeploymentAllPublications` - Bundle all publications
+* `publishAllPublicationsToMavenCentralPortalRepository` - Upload all publications
+
+=== Multi-Module Tasks
+
+For root project with subprojects:
+
+* `zipDeploymentAllModules` - Bundle all modules
+* `publishAllModulesToMavenCentralPortalRepository` - Upload all modules
+
+== Uploader Settings
+
+[cols="1,3"]
 |===
-|Workflow |Purpose
+|Property |Description
 
-|`build-on-branch.yml`
-|Runs `check` on pull requests and auto-labels PRs based on changed file paths
+|`uploader.maxStatusChecks`
+|Max status polling attempts +
+Default: `20`
 
-|`build-on-main.yml`
-|Runs `check` and creates version tag on push to `main`
+|`uploader.statusCheckDelay`
+|Delay between status checks +
+Default: `10 seconds`
 
-|`release-on-tag.yml`
-|Creates GitHub Release and publishes to Gradle Plugin Portal and Maven Central
+|`uploader.maxBundleSize`
+|Maximum size of a single upload bundle. Bundles exceeding this limit are automatically split into smaller chunks. Use `Int.megabytes` or `Int.gigabytes` extension properties for readable values. +
+Default: `256.megabytes`
+
+|`uploader.requestTimeout`
+|Timeout for individual HTTP requests to the Maven Central Portal API +
+Default: `5 minutes`
+
+|`uploader.connectTimeout`
+|Timeout for establishing an HTTP connection +
+Default: `30 seconds`
+
+|`uploader.maxRetries`
+|Maximum retry attempts for retriable HTTP failures (5xx, connection errors) +
+Default: `3`
+
+|`uploader.retryBaseDelay`
+|Base delay between retry attempts (exponential backoff: `baseDelay * 2^(attempt-1)`, capped at 5 minutes) +
+Default: `2 seconds`
 |===
 
-PR labeling rules are configured in `.github/labeler.yml`. +
-Changelog categories are configured in `.github/changelog-config.json`.
+Configuration example:
 
-*Release Flow*
-
-[source]
+[source,kotlin]
 ----
-PR merge → check → create tag → [tag push] → release → publish
-----
-
-*Versioning via Commit Messages*
-
-Version bumps are controlled by tokens in commit messages:
-
-[cols="1,1,2"]
-|===
-|Token |Bump |Example
-
-|`#major`
-|X.0.0
-|1.0.0 → 2.0.0 (Breaking changes)
-
-|`#minor`
-|0.X.0
-|1.0.0 → 1.1.0 (New features)
-
-|`#patch` or none
-|0.0.X
-|1.0.0 → 1.0.1 (Fixes, default)
-
-|`#none`
-|—
-|Skip tag creation
-|===
-
-Example commit message:
-
-[source]
-----
-feat: Add new authentication method #minor
+mavenCentralPortal {
+    uploader {
+        maxStatusChecks = 20
+        statusCheckDelay = Duration.ofSeconds(10)
+        maxBundleSize = 256.megabytes
+        requestTimeout = Duration.ofMinutes(5)
+        connectTimeout = Duration.ofSeconds(30)
+        maxRetries = 3
+        retryBaseDelay = Duration.ofSeconds(2)
+    }
+}
 ----
 
-*Regular Release*
+== Lifecycle Task Behavior
 
-. Create PR to `main`
-. Merge with version token in commit message (or omit for patch)
-. Pipeline automatically: check → tag → release → publish
+Plugin integrates with Gradle's `publish` lifecycle task in two modes:
 
-*Creating Major Version (1.x → 2.x)*
+=== Mode 1: Independent Publishing (default)
 
-When releasing breaking changes:
+Each project that applies the plugin publishes its own bundle independently.
+This is the default when the plugin is applied to individual projects (including via convention plugins in `buildSrc`).
 
 [source,bash]
 ----
-# Create support branch for current version
-git checkout main && git pull
-git checkout -b 1.x
-git push origin 1.x
-
-# Return to main and merge PR with #major token
-git checkout main
-# Merge PR with commit message containing #major
-# Auto-creates tag 2.0.0
+./gradlew publish
 ----
 
-*Backporting to Old Version*
+Each project executes its own `publishAllPublicationsToMavenCentralPortalRepository`.
+
+NOTE: When multiple subprojects publish independently, a warning is emitted suggesting atomic aggregation.
+
+=== Mode 2: Atomic Aggregation
+
+When the plugin is applied to the *root project* and subprojects have publications, all modules are aggregated into a single deployment bundle:
 
 [source,bash]
 ----
-# Cherry-pick fix to support branch
-git checkout 1.x && git pull
-git cherry-pick <commit-hash>
-git checkout -b fix/security-patch-1x
-git push origin fix/security-patch-1x
-
-# Create PR: fix/security-patch-1x → 1.x
-# After merge: auto-creates tag 1.x.y → release → publish
+./gradlew publish
 ----
 
-*Rollback (before publish)*
+Executes: `publishAllModulesToMavenCentralPortalRepository` (root only).
+Subprojects do not publish independently — one bundle, one deployment, atomic release.
 
-[source,bash]
-----
-git push --delete origin 1.0.1
-git tag -d 1.0.1
-----
-
-NOTE: Published versions cannot be deleted from Gradle Plugin Portal.
-
-*Required Secrets*
-
-[cols="1,2"]
-|===
-|Secret |Description
-
-|`ZENHELIX_COMMITER_APP_ID`
-|GitHub App ID for tag creation
-
-|`ZENHELIX_COMMITER_APP_PRIVATE_KEY`
-|GitHub App private key
-
-|`GRADLE_PUBLISH_KEY`
-|Gradle Plugin Portal publish key
-
-|`GRADLE_PUBLISH_SECRET`
-|Gradle Plugin Portal publish secret
-
-|`MAVEN_SONATYPE_USERNAME`
-|Maven Central username or token username
-
-|`MAVEN_SONATYPE_TOKEN`
-|Maven Central token password
-
-|`MAVEN_SONATYPE_SIGNING_KEY_ID`
-|GPG signing key ID
-
-|`MAVEN_SONATYPE_SIGNING_KEY_ASCII_ARMORED`
-|GPG private key (ASCII armored)
-
-|`MAVEN_SONATYPE_SIGNING_PUB_KEY_ASCII_ARMORED`
-|GPG public key (ASCII armored)
-
-|`MAVEN_SONATYPE_SIGNING_PASSWORD`
-|GPG key passphrase
-|===
-=====
+To enable this mode, apply the plugin to the root project and configure credentials there.
 
 == License
 
