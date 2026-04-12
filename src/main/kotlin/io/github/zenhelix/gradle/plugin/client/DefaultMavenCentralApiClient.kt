@@ -6,10 +6,12 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import io.github.zenhelix.gradle.plugin.client.model.Credentials
+import io.github.zenhelix.gradle.plugin.client.model.DeploymentId
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentStateType
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentStatus
 import io.github.zenhelix.gradle.plugin.client.model.Failure
 import io.github.zenhelix.gradle.plugin.client.model.HttpResponseResult
+import io.github.zenhelix.gradle.plugin.client.model.HttpStatus
 import io.github.zenhelix.gradle.plugin.client.model.PublishingType
 import io.github.zenhelix.gradle.plugin.client.model.Success
 import io.github.zenhelix.gradle.plugin.utils.RetryHandler
@@ -54,7 +56,7 @@ public class DefaultMavenCentralApiClient(
      */
     override suspend fun uploadDeploymentBundle(
         credentials: Credentials, bundle: Path, publishingType: PublishingType?, deploymentName: String?
-    ): HttpResponseResult<UUID, String> {
+    ): HttpResponseResult<DeploymentId, String> {
         require(Files.exists(bundle)) { "Bundle file does not exist: $bundle" }
         require(Files.isRegularFile(bundle)) { "Bundle path is not a file: $bundle" }
         require(Files.size(bundle) > 0) { "Bundle file is empty: $bundle" }
@@ -72,67 +74,63 @@ public class DefaultMavenCentralApiClient(
             post(filePart(BUNDLE_FILE_PART_NAME, boundary, bundle))
             header("Content-Type", "multipart/form-data; boundary=$boundary")
 
-            expectStatus(HTTP_CREATED)
-            parseSuccess { body -> UUID.fromString(body) }
+            expectStatus(HttpStatus.CREATED)
+            parseSuccess { body -> DeploymentId.fromString(body) }
             onSuccessLog { data -> "Bundle uploaded successfully. DeploymentId: $data" }
-            onErrorLog { status, body -> "Failed to upload bundle. Status: $status, Response: $body" }
+            onErrorLog { status, body -> "Failed to upload bundle. Status: ${status.code}, Response: $body" }
         }
     }
 
     override suspend fun deploymentStatus(
-        credentials: Credentials, deploymentId: UUID
+        credentials: Credentials, deploymentId: DeploymentId
     ): HttpResponseResult<DeploymentStatus, String> {
         return apiCall("deploymentStatus") {
             uri = URI("$baseUrl/api/v1/publisher/status?id=${urlEncode(deploymentId.toString())}")
             authorize(credentials)
             post()
 
-            expectStatus(HTTP_OK)
+            expectStatus(HttpStatus.OK)
             parseSuccess { body ->
-                val status = parseDeploymentStatus(body)
-                if (status != null) {
+                parseDeploymentStatus(body)?.also { status ->
                     logger.debug(
                         "Deployment status retrieved: deploymentId={}, state={}",
                         status.deploymentId, status.deploymentState
                     )
-                    status
-                } else {
-                    null
                 }
             }
-            onErrorLog { status, body -> "Failed to fetch deployment status. Status: $status, Response: $body" }
+            onErrorLog { status, body -> "Failed to fetch deployment status. Status: ${status.code}, Response: $body" }
         }
     }
 
     /**
      * [Publish the Deployment](https://central.sonatype.org/publish/publish-portal-api/#publish-or-drop-the-deployment)
      */
-    override suspend fun publishDeployment(credentials: Credentials, deploymentId: UUID): HttpResponseResult<Unit, String> {
+    override suspend fun publishDeployment(credentials: Credentials, deploymentId: DeploymentId): HttpResponseResult<Unit, String> {
         return apiCall("publishDeployment") {
             uri = URI("$baseUrl/api/v1/publisher/deployment/${urlEncode(deploymentId.toString())}")
             authorize(credentials)
             post()
 
-            expectStatus(HTTP_NO_CONTENT)
+            expectStatus(HttpStatus.NO_CONTENT)
             parseSuccess { Unit }
             onSuccessLog { "Deployment published successfully: $deploymentId" }
-            onErrorLog { status, body -> "Failed to publish deployment. Status: $status, Response: $body" }
+            onErrorLog { status, body -> "Failed to publish deployment. Status: ${status.code}, Response: $body" }
         }
     }
 
     /**
      * [Drop the Deployment](https://central.sonatype.org/publish/publish-portal-api/#publish-or-drop-the-deployment)
      */
-    override suspend fun dropDeployment(credentials: Credentials, deploymentId: UUID): HttpResponseResult<Unit, String> {
+    override suspend fun dropDeployment(credentials: Credentials, deploymentId: DeploymentId): HttpResponseResult<Unit, String> {
         return apiCall("dropDeployment") {
             uri = URI("$baseUrl/api/v1/publisher/deployment/${urlEncode(deploymentId.toString())}")
             authorize(credentials)
             delete()
 
-            expectStatus(HTTP_NO_CONTENT)
+            expectStatus(HttpStatus.NO_CONTENT)
             parseSuccess { Unit }
             onSuccessLog { "Deployment dropped successfully: $deploymentId" }
-            onErrorLog { status, body -> "Failed to drop deployment. Status: $status, Response: $body" }
+            onErrorLog { status, body -> "Failed to drop deployment. Status: ${status.code}, Response: $body" }
         }
     }
 
@@ -165,10 +163,10 @@ public class DefaultMavenCentralApiClient(
         private var body: HttpRequest.BodyPublisher = noBody()
         private val headers: MutableMap<String, String> = mutableMapOf()
 
-        var expectedSuccessStatus: Int = HTTP_OK
+        var expectedSuccessStatus: HttpStatus = HttpStatus.OK
         lateinit var successParser: (String) -> T?
         var successLogMessage: ((T) -> String)? = null
-        var errorLogMessage: ((Int, String) -> String)? = null
+        var errorLogMessage: ((HttpStatus, String) -> String)? = null
 
         fun authorize(credentials: Credentials) {
             headers["Authorization"] = "Bearer ${credentials.bearerToken}"
@@ -187,7 +185,7 @@ public class DefaultMavenCentralApiClient(
             headers[name] = value
         }
 
-        fun expectStatus(status: Int) {
+        fun expectStatus(status: HttpStatus) {
             expectedSuccessStatus = status
         }
 
@@ -199,8 +197,27 @@ public class DefaultMavenCentralApiClient(
             successLogMessage = message
         }
 
-        fun onErrorLog(message: (Int, String) -> String) {
+        fun onErrorLog(message: (HttpStatus, String) -> String) {
             errorLogMessage = message
+        }
+
+        fun handleResponse(response: HttpResponse<String>, body: String): HttpResponseResult<T, String> {
+            val responseHeaders = response.headers().map()
+            val status = HttpStatus(response.statusCode())
+
+            if (status != expectedSuccessStatus) {
+                errorLogMessage?.let { logger.warn(it(status, body)) }
+                return HttpResponseResult.Error(data = body, httpStatus = status, httpHeaders = responseHeaders)
+            }
+
+            val parsed = successParser(body)
+                ?: run {
+                    errorLogMessage?.let { logger.warn(it(status, body)) }
+                    return HttpResponseResult.Error(data = body, httpStatus = status, httpHeaders = responseHeaders)
+                }
+
+            successLogMessage?.let { logger.debug(it(parsed)) }
+            return HttpResponseResult.Success(data = parsed, httpStatus = status, httpHeaders = responseHeaders)
         }
 
         fun buildRequest(): HttpRequest {
@@ -228,31 +245,7 @@ public class DefaultMavenCentralApiClient(
         logger.debug("Sending {} request to: {}", operationName, builder.uri)
 
         return executeRequestWithRetry(request, operationName) { response, body ->
-            if (response.statusCode() == builder.expectedSuccessStatus) {
-                val parsed = builder.successParser(body)
-                if (parsed != null) {
-                    builder.successLogMessage?.let { logger.debug(it(parsed)) }
-                    HttpResponseResult.Success(
-                        data = parsed,
-                        httpStatus = response.statusCode(),
-                        httpHeaders = response.headers().map()
-                    )
-                } else {
-                    builder.errorLogMessage?.let { logger.warn(it(response.statusCode(), body)) }
-                    HttpResponseResult.Error(
-                        data = body,
-                        httpStatus = response.statusCode(),
-                        httpHeaders = response.headers().map()
-                    )
-                }
-            } else {
-                builder.errorLogMessage?.let { logger.warn(it(response.statusCode(), body)) }
-                HttpResponseResult.Error(
-                    data = body,
-                    httpStatus = response.statusCode(),
-                    httpHeaders = response.headers().map()
-                )
-            }
+            builder.handleResponse(response, body)
         }
     }
 
@@ -302,7 +295,7 @@ public class DefaultMavenCentralApiClient(
     }
 
     private fun isRetriableStatus(statusCode: Int): Boolean =
-        statusCode >= 500 || statusCode == HTTP_TOO_MANY_REQUESTS
+        statusCode >= 500 || statusCode == HttpStatus.TOO_MANY_REQUESTS.code
 
     private fun isRetriableException(e: Exception): Boolean =
         e is HttpTimeoutException || e is java.net.ConnectException ||
@@ -339,7 +332,7 @@ public class DefaultMavenCentralApiClient(
         val errors: Map<String, Any?>?
     ) {
         fun toModel() = DeploymentStatus(
-            deploymentId = UUID.fromString(deploymentId),
+            deploymentId = DeploymentId.fromString(deploymentId),
             deploymentName = deploymentName,
             deploymentState = DeploymentStateType.of(deploymentState),
             purls = purls,
@@ -350,11 +343,6 @@ public class DefaultMavenCentralApiClient(
     private companion object {
         private const val CRLF = "\r\n"
         private const val BUNDLE_FILE_PART_NAME = "bundle"
-
-        private const val HTTP_OK = 200
-        private const val HTTP_CREATED = 201
-        private const val HTTP_NO_CONTENT = 204
-        private const val HTTP_TOO_MANY_REQUESTS = 429
 
         private fun filePart(
             partName: String, boundary: String, file: Path

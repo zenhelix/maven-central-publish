@@ -1,12 +1,12 @@
 package io.github.zenhelix.gradle.plugin.client
 
 import io.github.zenhelix.gradle.plugin.client.model.Credentials
+import io.github.zenhelix.gradle.plugin.client.model.DeploymentId
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentStateType
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentStatus
 import io.github.zenhelix.gradle.plugin.client.model.HttpResponseResult
 import io.github.zenhelix.gradle.plugin.client.model.PublishingType
 import java.nio.file.Path
-import java.util.UUID
 
 /**
  * No-op API client for functional testing. Returns successful responses
@@ -16,13 +16,13 @@ internal class NoOpMavenCentralApiClient : MavenCentralApiClient {
 
     override suspend fun uploadDeploymentBundle(
         credentials: Credentials, bundle: Path, publishingType: PublishingType?, deploymentName: String?
-    ): HttpResponseResult<UUID, String> = HttpResponseResult.Success(UUID.randomUUID())
+    ): HttpResponseResult<DeploymentId, String> = HttpResponseResult.Success(DeploymentId.random())
 
     override suspend fun deploymentStatus(
-        credentials: Credentials, deploymentId: UUID
+        credentials: Credentials, deploymentId: DeploymentId
     ): HttpResponseResult<DeploymentStatus, String> = HttpResponseResult.Success(
         DeploymentStatus(
-            deploymentId = UUID.randomUUID(),
+            deploymentId = DeploymentId.random(),
             deploymentName = "",
             deploymentState = DeploymentStateType.PUBLISHED,
             purls = null, errors = null,
@@ -30,11 +30,11 @@ internal class NoOpMavenCentralApiClient : MavenCentralApiClient {
     )
 
     override suspend fun publishDeployment(
-        credentials: Credentials, deploymentId: UUID
+        credentials: Credentials, deploymentId: DeploymentId
     ): HttpResponseResult<Unit, String> = HttpResponseResult.Success(Unit)
 
     override suspend fun dropDeployment(
-        credentials: Credentials, deploymentId: UUID
+        credentials: Credentials, deploymentId: DeploymentId
     ): HttpResponseResult<Unit, String> = HttpResponseResult.Success(Unit)
 
     override fun close() {
