@@ -31,7 +31,7 @@ class DeploymentErrorTest {
 
     @Test
     fun `StatusCheckFailed is always droppable`() {
-        val error = DeploymentError.StatusCheckFailed(503, "Service Unavailable")
+        val error = DeploymentError.StatusCheckFailed(HttpStatus(503), "Service Unavailable")
         assertThat(error.isDroppable).isTrue()
     }
 
@@ -43,7 +43,7 @@ class DeploymentErrorTest {
 
     @Test
     fun `UploadFailed is not droppable`() {
-        val error = DeploymentError.UploadFailed(400, "Bad Request")
+        val error = DeploymentError.UploadFailed(HttpStatus.BAD_REQUEST, "Bad Request")
         assertThat(error.isDroppable).isFalse()
     }
 
@@ -66,7 +66,7 @@ class DeploymentErrorTest {
 
     @Test
     fun `toGradleException returns MavenCentralDeploymentException without cause for UploadFailed`() {
-        val error = DeploymentError.UploadFailed(400, "Bad Request")
+        val error = DeploymentError.UploadFailed(HttpStatus.BAD_REQUEST, "Bad Request")
         val gradleEx = error.toGradleException()
         assertThat(gradleEx).isInstanceOf(MavenCentralDeploymentException::class.java)
         assertThat(gradleEx.error).isSameAs(error)

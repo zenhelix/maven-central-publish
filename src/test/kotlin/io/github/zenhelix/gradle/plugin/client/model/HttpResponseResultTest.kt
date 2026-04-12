@@ -7,7 +7,7 @@ class HttpResponseResultTest {
 
     @Test
     fun `foldHttp delegates to onSuccess for Success`() {
-        val result: HttpResponseResult<Int, String> = HttpResponseResult.Success(data = 42, httpStatus = 200)
+        val result: HttpResponseResult<Int, String> = HttpResponseResult.Success(data = 42, httpStatus = HttpStatus.OK)
         val folded = result.foldHttp(
             onSuccess = { data, _, _ -> "ok:$data" },
             onError = { data, _, _, _ -> "err:$data" },
@@ -18,7 +18,7 @@ class HttpResponseResultTest {
 
     @Test
     fun `foldHttp delegates to onError for Error`() {
-        val result: HttpResponseResult<Int, String> = HttpResponseResult.Error(data = "bad", httpStatus = 400)
+        val result: HttpResponseResult<Int, String> = HttpResponseResult.Error(data = "bad", httpStatus = HttpStatus.BAD_REQUEST)
         val folded = result.foldHttp(
             onSuccess = { data, _, _ -> "ok:$data" },
             onError = { data, _, httpStatus, _ -> "err:$data:$httpStatus" },
@@ -41,7 +41,7 @@ class HttpResponseResultTest {
 
     @Test
     fun `fold treats Error as failure`() {
-        val result: HttpResponseResult<Int, String> = HttpResponseResult.Error(data = "bad", httpStatus = 400)
+        val result: HttpResponseResult<Int, String> = HttpResponseResult.Error(data = "bad", httpStatus = HttpStatus.BAD_REQUEST)
         val folded = result.fold(onSuccess = { "ok" }, onFailure = { "fail:$it" })
         assertThat(folded).isEqualTo("fail:bad")
     }
@@ -55,19 +55,19 @@ class HttpResponseResultTest {
 
     @Test
     fun `getOrNull returns data for Success`() {
-        val result: HttpResponseResult<Int, String> = HttpResponseResult.Success(data = 42, httpStatus = 200)
+        val result: HttpResponseResult<Int, String> = HttpResponseResult.Success(data = 42, httpStatus = HttpStatus.OK)
         assertThat(result.getOrNull()).isEqualTo(42)
     }
 
     @Test
     fun `getOrNull returns null for Error`() {
-        val result: HttpResponseResult<Int, String> = HttpResponseResult.Error(data = "bad", httpStatus = 400)
+        val result: HttpResponseResult<Int, String> = HttpResponseResult.Error(data = "bad", httpStatus = HttpStatus.BAD_REQUEST)
         assertThat(result.getOrNull()).isNull()
     }
 
     @Test
     fun `causeOrNull returns null for Success`() {
-        val result: HttpResponseResult<Int, String> = HttpResponseResult.Success(data = 42, httpStatus = 200)
+        val result: HttpResponseResult<Int, String> = HttpResponseResult.Success(data = 42, httpStatus = HttpStatus.OK)
         assertThat(result.causeOrNull()).isNull()
     }
 
@@ -81,7 +81,7 @@ class HttpResponseResultTest {
     @Test
     fun `causeOrNull returns cause for Error with cause`() {
         val cause = RuntimeException("inner")
-        val result: HttpResponseResult<Int, String> = HttpResponseResult.Error(data = "bad", cause = cause, httpStatus = 500)
+        val result: HttpResponseResult<Int, String> = HttpResponseResult.Error(data = "bad", cause = cause, httpStatus = HttpStatus(500))
         assertThat(result.causeOrNull()).isSameAs(cause)
     }
 }

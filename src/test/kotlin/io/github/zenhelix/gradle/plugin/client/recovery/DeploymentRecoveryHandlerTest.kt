@@ -1,13 +1,15 @@
 package io.github.zenhelix.gradle.plugin.client.recovery
 
 import io.github.zenhelix.gradle.plugin.client.MavenCentralApiClient
+import io.github.zenhelix.gradle.plugin.client.model.Credentials
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentError
+import io.github.zenhelix.gradle.plugin.client.model.DeploymentId
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentStateType
 import io.github.zenhelix.gradle.plugin.client.model.HttpResponseResult
+import io.github.zenhelix.gradle.plugin.client.model.HttpStatus
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
-import java.util.UUID
 import kotlinx.coroutines.test.runTest
 import org.assertj.core.api.Assertions.assertThat
 import org.gradle.api.logging.Logger
@@ -17,8 +19,8 @@ class DeploymentRecoveryHandlerTest {
 
     private val logger: Logger = mockk(relaxed = true)
     private val client: MavenCentralApiClient = mockk(relaxed = true)
-    private val creds = io.github.zenhelix.gradle.plugin.client.model.Credentials.BearerTokenCredentials("test-token")
-    private val deploymentId = UUID.fromString("12345678-1234-1234-1234-123456789012")
+    private val creds = Credentials.BearerTokenCredentials("test-token")
+    private val deploymentId = DeploymentId.fromString("12345678-1234-1234-1234-123456789012")
 
     private fun createHandler() = DeploymentRecoveryHandler(client, creds, logger)
 
@@ -35,7 +37,7 @@ class DeploymentRecoveryHandlerTest {
 
     @Test
     fun `recover does not drop when error is not droppable`() = runTest {
-        val error = DeploymentError.UploadFailed(400, "Bad Request")
+        val error = DeploymentError.UploadFailed(HttpStatus.BAD_REQUEST, "Bad Request")
 
         val result = createHandler().recover(deploymentId, error)
 
@@ -46,8 +48,8 @@ class DeploymentRecoveryHandlerTest {
     @Test
     fun `recoverAll drops only droppable deployments`() = runTest {
         coEvery { client.dropDeployment(any(), any()) } returns HttpResponseResult.Success(Unit)
-        val id1 = UUID.fromString("11111111-1111-1111-1111-111111111111")
-        val id2 = UUID.fromString("22222222-2222-2222-2222-222222222222")
+        val id1 = DeploymentId.fromString("11111111-1111-1111-1111-111111111111")
+        val id2 = DeploymentId.fromString("22222222-2222-2222-2222-222222222222")
         val lastKnownStates = mapOf(
             id1 to DeploymentStateType.VALIDATED,
             id2 to DeploymentStateType.PUBLISHING
@@ -63,8 +65,8 @@ class DeploymentRecoveryHandlerTest {
     @Test
     fun `recoverAll treats unknown state as droppable`() = runTest {
         coEvery { client.dropDeployment(any(), any()) } returns HttpResponseResult.Success(Unit)
-        val id1 = UUID.fromString("11111111-1111-1111-1111-111111111111")
-        val error = DeploymentError.StatusCheckFailed(503, "Service Unavailable")
+        val id1 = DeploymentId.fromString("11111111-1111-1111-1111-111111111111")
+        val error = DeploymentError.StatusCheckFailed(HttpStatus(503), "Service Unavailable")
 
         createHandler().recoverAll(listOf(id1), emptyMap(), error)
 
@@ -74,12 +76,12 @@ class DeploymentRecoveryHandlerTest {
     @Test
     fun `recoverPublishFailure drops unpublished deployments only`() = runTest {
         coEvery { client.dropDeployment(any(), any()) } returns HttpResponseResult.Success(Unit)
-        val id1 = UUID.fromString("11111111-1111-1111-1111-111111111111")
-        val id2 = UUID.fromString("22222222-2222-2222-2222-222222222222")
-        val id3 = UUID.fromString("33333333-3333-3333-3333-333333333333")
+        val id1 = DeploymentId.fromString("11111111-1111-1111-1111-111111111111")
+        val id2 = DeploymentId.fromString("22222222-2222-2222-2222-222222222222")
+        val id3 = DeploymentId.fromString("33333333-3333-3333-3333-333333333333")
         val publishedIds = setOf(id1)
         val failedId = id2
-        val error = DeploymentError.PublishFailed(id2, 500)
+        val error = DeploymentError.PublishFailed(id2, HttpStatus(500))
 
         createHandler().recoverPublishFailure(listOf(id1, id2, id3), publishedIds, failedId, error)
 

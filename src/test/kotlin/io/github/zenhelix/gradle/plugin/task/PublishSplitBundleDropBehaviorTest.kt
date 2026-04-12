@@ -2,9 +2,11 @@ package io.github.zenhelix.gradle.plugin.task
 
 import io.github.zenhelix.gradle.plugin.client.MavenCentralApiClient
 import io.github.zenhelix.gradle.plugin.client.model.Credentials.BearerTokenCredentials
+import io.github.zenhelix.gradle.plugin.client.model.DeploymentId
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentStateType
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentStatus
 import io.github.zenhelix.gradle.plugin.client.model.HttpResponseResult
+import io.github.zenhelix.gradle.plugin.client.model.HttpStatus
 import io.github.zenhelix.gradle.plugin.client.model.MavenCentralDeploymentException
 import io.github.zenhelix.gradle.plugin.client.model.PublishingType
 import io.mockk.coEvery
@@ -12,9 +14,7 @@ import io.mockk.coVerify
 import io.mockk.mockk
 import java.io.File
 import java.time.Duration
-import java.util.UUID
 import org.assertj.core.api.Assertions.assertThatThrownBy
-import org.gradle.api.GradleException
 import org.gradle.kotlin.dsl.register
 import org.gradle.testfixtures.ProjectBuilder
 import org.junit.jupiter.api.BeforeEach
@@ -27,7 +27,7 @@ class PublishSplitBundleDropBehaviorTest {
     private lateinit var projectDir: File
 
     private lateinit var mockClient: MavenCentralApiClient
-    private val deploymentId = UUID.fromString("12345678-1234-1234-1234-123456789012")
+    private val deploymentId = DeploymentId.fromString("12345678-1234-1234-1234-123456789012")
 
     @BeforeEach
     fun setUp() {
@@ -105,8 +105,8 @@ class PublishSplitBundleDropBehaviorTest {
         // then publish of chunk 2 fails → handlePublishFailure drops chunk 1,
         // outer catch should NOT drop again
         val bundlesDir = createBundleFiles(2)
-        val id1 = UUID.fromString("11111111-1111-1111-1111-111111111111")
-        val id2 = UUID.fromString("22222222-2222-2222-2222-222222222222")
+        val id1 = DeploymentId.fromString("11111111-1111-1111-1111-111111111111")
+        val id2 = DeploymentId.fromString("22222222-2222-2222-2222-222222222222")
 
         var uploadCount = 0
         coEvery { mockClient.uploadDeploymentBundle(any(), any(), any(), any()) } answers {
@@ -125,7 +125,7 @@ class PublishSplitBundleDropBehaviorTest {
         // Publish id1 succeeds, publish id2 fails
         coEvery { mockClient.publishDeployment(any(), eq(id1)) } returns HttpResponseResult.Success(Unit)
         coEvery { mockClient.publishDeployment(any(), eq(id2)) } returns HttpResponseResult.Error(
-            data = "Internal error", httpStatus = 500
+            data = "Internal error", httpStatus = HttpStatus(500)
         )
         coEvery { mockClient.dropDeployment(any(), any()) } returns HttpResponseResult.Success(Unit)
 

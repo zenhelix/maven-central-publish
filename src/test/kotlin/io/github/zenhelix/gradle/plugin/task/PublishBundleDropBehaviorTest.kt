@@ -2,20 +2,19 @@ package io.github.zenhelix.gradle.plugin.task
 
 import io.github.zenhelix.gradle.plugin.client.MavenCentralApiClient
 import io.github.zenhelix.gradle.plugin.client.model.Credentials.BearerTokenCredentials
+import io.github.zenhelix.gradle.plugin.client.model.DeploymentId
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentStateType
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentStatus
 import io.github.zenhelix.gradle.plugin.client.model.HttpResponseResult
+import io.github.zenhelix.gradle.plugin.client.model.HttpStatus
+import io.github.zenhelix.gradle.plugin.client.model.MavenCentralDeploymentException
 import io.github.zenhelix.gradle.plugin.client.model.PublishingType
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
 import java.io.File
-import java.nio.file.Path
 import java.time.Duration
-import java.util.UUID
-import io.github.zenhelix.gradle.plugin.client.model.MavenCentralDeploymentException
 import org.assertj.core.api.Assertions.assertThatThrownBy
-import org.gradle.api.GradleException
 import org.gradle.api.model.ObjectFactory
 import org.gradle.kotlin.dsl.register
 import org.gradle.testfixtures.ProjectBuilder
@@ -30,7 +29,7 @@ class PublishBundleDropBehaviorTest {
     private lateinit var projectDir: File
 
     private lateinit var mockClient: MavenCentralApiClient
-    private val deploymentId = UUID.fromString("12345678-1234-1234-1234-123456789012")
+    private val deploymentId = DeploymentId.fromString("12345678-1234-1234-1234-123456789012")
 
     @BeforeEach
     fun setUp() {
@@ -147,7 +146,7 @@ class PublishBundleDropBehaviorTest {
         coEvery { mockClient.deploymentStatus(any(), any()) } returns statusReturning(DeploymentStateType.VALIDATING)
         coEvery { mockClient.dropDeployment(any(), any()) } returns HttpResponseResult.Error(
             data = """{"httpStatus":400,"errorCode":10400,"message":"Can only drop deployments that are in a VALIDATED or FAILED state."}""",
-            httpStatus = 400
+            httpStatus = HttpStatus.BAD_REQUEST
         )
 
         // Should still throw the timeout exception, but NOT crash on the drop failure
@@ -165,7 +164,7 @@ class PublishBundleDropBehaviorTest {
         // The deployment state is unknown, so drop should be attempted as best-effort
         coEvery { mockClient.deploymentStatus(any(), any()) } returns HttpResponseResult.Error(
             data = "Service Unavailable",
-            httpStatus = 503
+            httpStatus = HttpStatus(503)
         )
         coEvery { mockClient.dropDeployment(any(), any()) } returns HttpResponseResult.Success(Unit)
 

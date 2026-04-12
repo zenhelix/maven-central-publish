@@ -1,10 +1,14 @@
 package io.github.zenhelix.gradle.plugin.client
 
 import io.github.zenhelix.gradle.plugin.client.model.Credentials.BearerTokenCredentials
+import io.github.zenhelix.gradle.plugin.client.model.DeploymentId
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentStateType
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentStatus
 import io.github.zenhelix.gradle.plugin.client.model.HttpResponseResult
+import io.github.zenhelix.gradle.plugin.client.model.HttpStatus
 import io.github.zenhelix.gradle.plugin.client.model.PublishingType
+import io.github.zenhelix.gradle.plugin.utils.assertHttpSuccess
+import io.github.zenhelix.gradle.plugin.utils.mockHttpResponse
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -12,11 +16,10 @@ import io.mockk.unmockkAll
 import io.mockk.verify
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
-import java.net.http.HttpResponse
 import java.net.http.HttpResponse.BodyHandler
 import java.nio.file.Files
 import java.nio.file.Path
-import java.util.UUID
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
@@ -50,15 +53,11 @@ class DefaultMavenCentralApiClientTest {
 
     @Test
     fun `uploadDeploymentBundle should successfully upload bundle and return deployment ID`() = runTest {
-        val expectedDeploymentId = UUID.fromString("12345678-1234-1234-1234-123456789012")
+        val expectedDeploymentId = DeploymentId.fromString("12345678-1234-1234-1234-123456789012")
 
         every {
             mockHttpClient.send(any<HttpRequest>(), any<BodyHandler<String>>())
-        } returns mockk<HttpResponse<String>> {
-            every { statusCode() } returns 201
-            every { body() } returns expectedDeploymentId.toString()
-            every { headers() } returns mockk { every { map() } returns mapOf("Content-Type" to listOf("text/plain")) }
-        }
+        } returns mockHttpResponse(201, expectedDeploymentId.toString(), mapOf("Content-Type" to listOf("text/plain")))
 
         val result = client.uploadDeploymentBundle(
             credentials = BearerTokenCredentials(token = "test-token-123"),
@@ -67,10 +66,9 @@ class DefaultMavenCentralApiClientTest {
             deploymentName = "test-deployment"
         )
 
-        assertThat(result).isInstanceOf(HttpResponseResult.Success::class.java)
-        val success = result as HttpResponseResult.Success
-        assertThat(success.data).isEqualTo(expectedDeploymentId)
-        assertThat(success.httpStatus).isEqualTo(201)
+        val data = assertHttpSuccess<DeploymentId>(result)
+        assertThat(data).isEqualTo(expectedDeploymentId)
+        assertThat((result as HttpResponseResult.Success).httpStatus).isEqualTo(HttpStatus.CREATED)
 
         verify { mockHttpClient.send(any<HttpRequest>(), any<BodyHandler<String>>()) }
     }
@@ -81,11 +79,7 @@ class DefaultMavenCentralApiClientTest {
 
         every {
             mockHttpClient.send(capture(capturedRequest), any<BodyHandler<String>>())
-        } returns mockk<HttpResponse<String>> {
-            every { statusCode() } returns 201
-            every { body() } returns UUID.fromString("12345678-1234-1234-1234-123456789012").toString()
-            every { headers() } returns mockk { every { map() } returns emptyMap() }
-        }
+        } returns mockHttpResponse(201, DeploymentId.fromString("12345678-1234-1234-1234-123456789012").toString())
 
         client.uploadDeploymentBundle(
             credentials = BearerTokenCredentials(token = "test-token-123"),
@@ -98,27 +92,25 @@ class DefaultMavenCentralApiClientTest {
     }
 
     @Test
-    fun `uploadDeploymentBundle should throw exception when bundle file does not exist`() = runTest {
+    fun `uploadDeploymentBundle should throw exception when bundle file does not exist`() {
         val nonExistentFile = tempDir.resolve("non-existent.zip")
 
-        try {
-            client.uploadDeploymentBundle(
-                credentials = BearerTokenCredentials(token = "test-token-123"),
-                bundle = nonExistentFile
-            )
-            org.junit.jupiter.api.Assertions.fail("Expected IllegalArgumentException")
-        } catch (e: IllegalArgumentException) {
-            assertThat(e.message).contains("Bundle file does not exist")
-        }
+        assertThatThrownBy {
+            runBlocking {
+                client.uploadDeploymentBundle(
+                    credentials = BearerTokenCredentials(token = "test-token-123"),
+                    bundle = nonExistentFile
+                )
+            }
+        }.isInstanceOf(IllegalArgumentException::class.java)
+         .hasMessageContaining("Bundle file does not exist")
     }
 
     @Test
     fun `deploymentStatus should successfully retrieve deployment status`() = runTest {
         every {
             mockHttpClient.send(any<HttpRequest>(), any<BodyHandler<String>>())
-        } returns mockk<HttpResponse<String>> {
-            every { statusCode() } returns 200
-            every { body() } returns """
+        } returns mockHttpResponse(200, """
             {
                 "deploymentId": "12345678-1234-1234-1234-123456789012",
                 "deploymentName": "test-deployment",
@@ -126,21 +118,18 @@ class DefaultMavenCentralApiClientTest {
                 "purls": ["pkg:maven/io.github.test/artifact@1.0.0"],
                 "errors": null
             }
-        """.trimIndent()
-            every { headers() } returns mockk { every { map() } returns emptyMap() }
-        }
+        """.trimIndent())
 
         val result = client.deploymentStatus(
             credentials = BearerTokenCredentials(token = "test-token-123"),
-            deploymentId = UUID.fromString("12345678-1234-1234-1234-123456789012")
+            deploymentId = DeploymentId.fromString("12345678-1234-1234-1234-123456789012")
         )
 
-        assertThat(result).isInstanceOf(HttpResponseResult.Success::class.java)
-        val success = result as HttpResponseResult.Success<DeploymentStatus>
-        assertThat(success.data.deploymentId).isEqualTo(UUID.fromString("12345678-1234-1234-1234-123456789012"))
-        assertThat(success.data.deploymentName).isEqualTo("test-deployment")
-        assertThat(success.data.deploymentState).isEqualTo(DeploymentStateType.VALIDATED)
-        assertThat(success.httpStatus).isEqualTo(200)
+        val data = assertHttpSuccess<DeploymentStatus>(result)
+        assertThat(data.deploymentId).isEqualTo(DeploymentId.fromString("12345678-1234-1234-1234-123456789012"))
+        assertThat(data.deploymentName).isEqualTo("test-deployment")
+        assertThat(data.deploymentState).isEqualTo(DeploymentStateType.VALIDATED)
+        assertThat((result as HttpResponseResult.Success).httpStatus).isEqualTo(HttpStatus.OK)
     }
 
     @Test
@@ -149,40 +138,32 @@ class DefaultMavenCentralApiClientTest {
 
         every {
             mockHttpClient.send(any<HttpRequest>(), any<BodyHandler<String>>())
-        } returns mockk<HttpResponse<String>> {
-            every { statusCode() } returns 404
-            every { body() } returns errorMessage
-            every { headers() } returns mockk { every { map() } returns emptyMap() }
-        }
+        } returns mockHttpResponse(404, errorMessage)
 
         val result = client.deploymentStatus(
             credentials = BearerTokenCredentials(token = "test-token-123"),
-            deploymentId = UUID.fromString("12345678-1234-1234-1234-123456789012")
+            deploymentId = DeploymentId.fromString("12345678-1234-1234-1234-123456789012")
         )
 
         assertThat(result).isInstanceOf(HttpResponseResult.Error::class.java)
         val error = result as HttpResponseResult.Error
         assertThat(error.data).isEqualTo(errorMessage)
-        assertThat(error.httpStatus).isEqualTo(404)
+        assertThat(error.httpStatus).isEqualTo(HttpStatus(404))
     }
 
     @Test
     fun `publishDeployment should successfully publish deployment`() = runTest {
         every {
             mockHttpClient.send(any<HttpRequest>(), any<BodyHandler<String>>())
-        } returns mockk<HttpResponse<String>> {
-            every { statusCode() } returns 204
-            every { body() } returns ""
-            every { headers() } returns mockk { every { map() } returns emptyMap() }
-        }
+        } returns mockHttpResponse(204, "")
 
         val result = client.publishDeployment(
             credentials = BearerTokenCredentials(token = "test-token-123"),
-            deploymentId = UUID.fromString("12345678-1234-1234-1234-123456789012")
+            deploymentId = DeploymentId.fromString("12345678-1234-1234-1234-123456789012")
         )
 
         assertThat(result).isInstanceOf(HttpResponseResult.Success::class.java)
-        assertThat((result as HttpResponseResult.Success).httpStatus).isEqualTo(204)
+        assertThat((result as HttpResponseResult.Success).httpStatus).isEqualTo(HttpStatus.NO_CONTENT)
     }
 
     @Test
@@ -191,15 +172,11 @@ class DefaultMavenCentralApiClientTest {
 
         every {
             mockHttpClient.send(capture(capturedRequest), any<BodyHandler<String>>())
-        } returns mockk<HttpResponse<String>> {
-            every { statusCode() } returns 204
-            every { body() } returns ""
-            every { headers() } returns mockk { every { map() } returns emptyMap() }
-        }
+        } returns mockHttpResponse(204, "")
 
         client.publishDeployment(
             credentials = BearerTokenCredentials(token = "test-token-123"),
-            deploymentId = UUID.fromString("12345678-1234-1234-1234-123456789012")
+            deploymentId = DeploymentId.fromString("12345678-1234-1234-1234-123456789012")
         )
 
         assertThat(capturedRequest.captured.method()).isEqualTo("POST")
@@ -212,24 +189,20 @@ class DefaultMavenCentralApiClientTest {
     fun `dropDeployment should successfully drop deployment`() = runTest {
         every {
             mockHttpClient.send(any<HttpRequest>(), any<BodyHandler<String>>())
-        } returns mockk<HttpResponse<String>> {
-            every { statusCode() } returns 204
-            every { body() } returns ""
-            every { headers() } returns mockk { every { map() } returns emptyMap() }
-        }
+        } returns mockHttpResponse(204, "")
 
         val result = client.dropDeployment(
             credentials = BearerTokenCredentials(token = "test-token-123"),
-            deploymentId = UUID.fromString("12345678-1234-1234-1234-123456789012")
+            deploymentId = DeploymentId.fromString("12345678-1234-1234-1234-123456789012")
         )
 
         assertThat(result).isInstanceOf(HttpResponseResult.Success::class.java)
-        assertThat((result as HttpResponseResult.Success).httpStatus).isEqualTo(204)
+        assertThat((result as HttpResponseResult.Success).httpStatus).isEqualTo(HttpStatus.NO_CONTENT)
     }
 
     @Test
     fun `uploadDeploymentBundle should retry on HTTP 429`() = runTest {
-        val expectedDeploymentId = UUID.fromString("12345678-1234-1234-1234-123456789012")
+        val expectedDeploymentId = DeploymentId.fromString("12345678-1234-1234-1234-123456789012")
         var callCount = 0
 
         every {
@@ -237,17 +210,9 @@ class DefaultMavenCentralApiClientTest {
         } answers {
             callCount++
             if (callCount == 1) {
-                mockk<HttpResponse<String>> {
-                    every { statusCode() } returns 429
-                    every { body() } returns "Rate limited"
-                    every { headers() } returns mockk { every { map() } returns emptyMap() }
-                }
+                mockHttpResponse(429, "Rate limited")
             } else {
-                mockk<HttpResponse<String>> {
-                    every { statusCode() } returns 201
-                    every { body() } returns expectedDeploymentId.toString()
-                    every { headers() } returns mockk { every { map() } returns mapOf("Content-Type" to listOf("text/plain")) }
-                }
+                mockHttpResponse(201, expectedDeploymentId.toString(), mapOf("Content-Type" to listOf("text/plain")))
             }
         }
 
@@ -256,8 +221,8 @@ class DefaultMavenCentralApiClientTest {
             bundle = createTestBundleFile()
         )
 
-        assertThat(result).isInstanceOf(HttpResponseResult.Success::class.java)
-        assertThat((result as HttpResponseResult.Success).data).isEqualTo(expectedDeploymentId)
+        val data = assertHttpSuccess<DeploymentId>(result)
+        assertThat(data).isEqualTo(expectedDeploymentId)
         assertThat(callCount).isEqualTo(2)
     }
 
@@ -270,11 +235,7 @@ class DefaultMavenCentralApiClientTest {
 
         every {
             mockHttpClient.send(capture(capturedRequest), any<BodyHandler<String>>())
-        } returns mockk<HttpResponse<String>> {
-            every { statusCode() } returns 201
-            every { body() } returns UUID.randomUUID().toString()
-            every { headers() } returns mockk { every { map() } returns emptyMap() }
-        }
+        } returns mockHttpResponse(201, DeploymentId.random().toString())
 
         client.uploadDeploymentBundle(
             credentials = BearerTokenCredentials(token = "test-token-123"),
@@ -290,15 +251,11 @@ class DefaultMavenCentralApiClientTest {
 
         every {
             mockHttpClient.send(capture(capturedRequest), any<BodyHandler<String>>())
-        } returns mockk<HttpResponse<String>> {
-            every { statusCode() } returns 204
-            every { body() } returns ""
-            every { headers() } returns mockk { every { map() } returns emptyMap() }
-        }
+        } returns mockHttpResponse(204, "")
 
         client.dropDeployment(
             credentials = BearerTokenCredentials(token = "test-token-123"),
-            deploymentId = UUID.fromString("12345678-1234-1234-1234-123456789012")
+            deploymentId = DeploymentId.fromString("12345678-1234-1234-1234-123456789012")
         )
 
         assertThat(capturedRequest.captured.method()).isEqualTo("DELETE")
@@ -309,7 +266,7 @@ class DefaultMavenCentralApiClientTest {
 
     @Test
     fun `uploadDeploymentBundle should retry on HTTP 500`() = runTest {
-        val expectedDeploymentId = UUID.fromString("12345678-1234-1234-1234-123456789012")
+        val expectedDeploymentId = DeploymentId.fromString("12345678-1234-1234-1234-123456789012")
         var callCount = 0
 
         every {
@@ -317,17 +274,9 @@ class DefaultMavenCentralApiClientTest {
         } answers {
             callCount++
             if (callCount == 1) {
-                mockk<HttpResponse<String>> {
-                    every { statusCode() } returns 500
-                    every { body() } returns "Internal Server Error"
-                    every { headers() } returns mockk { every { map() } returns emptyMap() }
-                }
+                mockHttpResponse(500, "Internal Server Error")
             } else {
-                mockk<HttpResponse<String>> {
-                    every { statusCode() } returns 201
-                    every { body() } returns expectedDeploymentId.toString()
-                    every { headers() } returns mockk { every { map() } returns mapOf("Content-Type" to listOf("text/plain")) }
-                }
+                mockHttpResponse(201, expectedDeploymentId.toString(), mapOf("Content-Type" to listOf("text/plain")))
             }
         }
 
@@ -336,8 +285,8 @@ class DefaultMavenCentralApiClientTest {
             bundle = createTestBundleFile()
         )
 
-        assertThat(result).isInstanceOf(HttpResponseResult.Success::class.java)
-        assertThat((result as HttpResponseResult.Success).data).isEqualTo(expectedDeploymentId)
+        val data = assertHttpSuccess<DeploymentId>(result)
+        assertThat(data).isEqualTo(expectedDeploymentId)
         assertThat(callCount).isEqualTo(2)
     }
 
@@ -361,15 +310,11 @@ class DefaultMavenCentralApiClientTest {
     fun `deploymentStatus should handle invalid JSON gracefully`() = runTest {
         every {
             mockHttpClient.send(any<HttpRequest>(), any<BodyHandler<String>>())
-        } returns mockk<HttpResponse<String>> {
-            every { statusCode() } returns 200
-            every { body() } returns "not valid json"
-            every { headers() } returns mockk { every { map() } returns emptyMap() }
-        }
+        } returns mockHttpResponse(200, "not valid json")
 
         val result = client.deploymentStatus(
             credentials = BearerTokenCredentials(token = "test-token-123"),
-            deploymentId = UUID.fromString("12345678-1234-1234-1234-123456789012")
+            deploymentId = DeploymentId.fromString("12345678-1234-1234-1234-123456789012")
         )
 
         // Invalid JSON with 200 status returns Error (parse failure results in null status)

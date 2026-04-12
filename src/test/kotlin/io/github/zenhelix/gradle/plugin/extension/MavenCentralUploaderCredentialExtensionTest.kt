@@ -1,9 +1,9 @@
 package io.github.zenhelix.gradle.plugin.extension
 
 import io.github.zenhelix.gradle.plugin.client.model.Credentials
-import io.github.zenhelix.gradle.plugin.client.model.Failure
-import io.github.zenhelix.gradle.plugin.client.model.Success
 import io.github.zenhelix.gradle.plugin.client.model.ValidationError
+import io.github.zenhelix.gradle.plugin.utils.assertFailure
+import io.github.zenhelix.gradle.plugin.utils.assertSuccess
 import io.github.zenhelix.gradle.plugin.utils.mapCredentials
 import org.assertj.core.api.Assertions.assertThat
 import org.gradle.kotlin.dsl.newInstance
@@ -25,10 +25,8 @@ class MavenCentralUploaderCredentialExtensionTest {
         }
 
         val result = project.mapCredentials(extension).get()
-        assertThat(result).isInstanceOf(Success::class.java)
-        val credentials = (result as Success).value
-        assertThat(credentials).isInstanceOf(Credentials.BearerTokenCredentials::class.java)
-        assertThat((credentials as Credentials.BearerTokenCredentials).token).isEqualTo("my-token")
+        val credentials = assertSuccess<Credentials.BearerTokenCredentials>(result)
+        assertThat(credentials.token).isEqualTo("my-token")
     }
 
     @Test
@@ -42,12 +40,9 @@ class MavenCentralUploaderCredentialExtensionTest {
         }
 
         val result = project.mapCredentials(extension).get()
-        assertThat(result).isInstanceOf(Success::class.java)
-        val credentials = (result as Success).value
-        assertThat(credentials).isInstanceOf(Credentials.UsernamePasswordCredentials::class.java)
-        val creds = credentials as Credentials.UsernamePasswordCredentials
-        assertThat(creds.username).isEqualTo("user")
-        assertThat(creds.password).isEqualTo("pass")
+        val credentials = assertSuccess<Credentials.UsernamePasswordCredentials>(result)
+        assertThat(credentials.username).isEqualTo("user")
+        assertThat(credentials.password).isEqualTo("pass")
     }
 
     @Test
@@ -62,9 +57,7 @@ class MavenCentralUploaderCredentialExtensionTest {
         }
 
         val result = project.mapCredentials(extension).get()
-        assertThat(result).isInstanceOf(Failure::class.java)
-        val error = (result as Failure).error
-        assertThat(error).isInstanceOf(ValidationError.AmbiguousCredentials::class.java)
+        val error = assertFailure<ValidationError.AmbiguousCredentials>(result)
         assertThat(error.message).contains("Both 'bearer' and 'usernamePassword'")
     }
 
@@ -73,9 +66,7 @@ class MavenCentralUploaderCredentialExtensionTest {
         val extension = createExtension()
 
         val result = project.mapCredentials(extension).get()
-        assertThat(result).isInstanceOf(Failure::class.java)
-        val error = (result as Failure).error
-        assertThat(error).isInstanceOf(ValidationError.NoCredentials::class.java)
+        val error = assertFailure<ValidationError.NoCredentials>(result)
         assertThat(error.message).contains("No credentials configured")
     }
 
@@ -87,9 +78,7 @@ class MavenCentralUploaderCredentialExtensionTest {
         }
 
         val result = project.mapCredentials(extension).get()
-        assertThat(result).isInstanceOf(Failure::class.java)
-        val error = (result as Failure).error
-        assertThat(error).isInstanceOf(ValidationError.MissingCredential::class.java)
+        val error = assertFailure<ValidationError.MissingCredential>(result)
         assertThat(error.message).contains("Bearer token is not set")
     }
 
@@ -103,8 +92,8 @@ class MavenCentralUploaderCredentialExtensionTest {
         }
 
         val result = project.mapCredentials(extension).get()
-        assertThat(result).isInstanceOf(Failure::class.java)
-        assertThat((result as Failure).error.message).contains("Username is not set")
+        val error = assertFailure<ValidationError.MissingCredential>(result)
+        assertThat(error.message).contains("Username is not set")
     }
 
     @Test
@@ -117,7 +106,7 @@ class MavenCentralUploaderCredentialExtensionTest {
         }
 
         val result = project.mapCredentials(extension).get()
-        assertThat(result).isInstanceOf(Failure::class.java)
-        assertThat((result as Failure).error.message).contains("Password is not set")
+        val error = assertFailure<ValidationError.MissingCredential>(result)
+        assertThat(error.message).contains("Password is not set")
     }
 }
