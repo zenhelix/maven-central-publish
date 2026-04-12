@@ -33,6 +33,18 @@ import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.TaskAction
 import org.gradle.work.DisableCachingByDefault
 
+/**
+ * Gradle task that publishes a set of split deployment bundle chunks to the Maven Central Portal.
+ *
+ * When a single bundle exceeds [UploaderSettingsExtension.maxBundleSize] the plugin splits it
+ * into multiple smaller ZIP chunks and delegates to this task instead of
+ * [PublishBundleMavenCentralTask]. The task:
+ * 1. Uploads all chunks sequentially, rolling back already-uploaded deployments on any upload failure.
+ * 2. Waits until every chunk reaches the `VALIDATED` (or `PUBLISHED`) state before proceeding,
+ *    ensuring atomic validation across all chunks.
+ * 3. Publishes all validated deployments together when [PublishingType.AUTOMATIC] was requested.
+ * 4. Drops all deployments on validation or publish failure to avoid partial releases.
+ */
 @DisableCachingByDefault(because = "Not worth caching - publishes to external service")
 public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
 

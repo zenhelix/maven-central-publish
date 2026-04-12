@@ -9,6 +9,30 @@ import org.gradle.kotlin.dsl.newInstance
 import org.gradle.kotlin.dsl.property
 import javax.inject.Inject
 
+/**
+ * Main configuration extension for the Maven Central publish plugin, registered as the
+ * `mavenCentralPortal { }` DSL block in your build script.
+ *
+ * Example usage:
+ * ```kotlin
+ * mavenCentralPortal {
+ *     baseUrl = "https://central.sonatype.com"
+ *     publishingType = PublishingMode.AUTOMATIC
+ *     credentials {
+ *         bearer { token = providers.environmentVariable("MAVEN_TOKEN") }
+ *     }
+ *     uploader {
+ *         maxStatusChecks = 30
+ *         statusCheckDelay = Duration.ofSeconds(15)
+ *         maxBundleSize = 512.megabytes
+ *     }
+ * }
+ * ```
+ *
+ * @see PublishingMode
+ * @see MavenCentralUploaderCredentialExtension
+ * @see UploaderSettingsExtension
+ */
 public open class MavenCentralUploaderExtension @Inject constructor(objects: ObjectFactory) {
 
     public val baseUrl: Property<String> = objects.property<String>().convention(DEFAULT_CENTRAL_MAVEN_PORTAL_BASE_URL)
@@ -35,6 +59,29 @@ public open class MavenCentralUploaderExtension @Inject constructor(objects: Obj
     }
 }
 
+/**
+ * Credential configuration for authenticating with the Maven Central Portal API.
+ *
+ * Exactly one credential mode must be configured — either [bearer] or [usernamePassword].
+ * Configuring both will result in a validation error at publish time.
+ *
+ * Bearer token example:
+ * ```kotlin
+ * credentials {
+ *     bearer { token = providers.environmentVariable("MAVEN_TOKEN") }
+ * }
+ * ```
+ *
+ * Username/password example:
+ * ```kotlin
+ * credentials {
+ *     usernamePassword {
+ *         username = providers.environmentVariable("MAVEN_USERNAME")
+ *         password = providers.environmentVariable("MAVEN_PASSWORD")
+ *     }
+ * }
+ * ```
+ */
 public open class MavenCentralUploaderCredentialExtension @Inject constructor(objects: ObjectFactory) {
 
     private sealed interface CredentialMode {
@@ -72,15 +119,45 @@ public open class MavenCentralUploaderCredentialExtension @Inject constructor(ob
     public val isUsernamePasswordConfigured: Boolean get() = mode == CredentialMode.UsernamePassword || mode == CredentialMode.Both
 }
 
+/**
+ * Bearer token credential for authenticating with the Maven Central Portal.
+ *
+ * Generate a token at https://central.sonatype.com/account (User Token section).
+ */
 public open class BearerCredentialExtension @Inject constructor(objects: ObjectFactory) {
     public val token: Property<String> = objects.property<String>()
 }
 
+/**
+ * Username/password credential for authenticating with the Maven Central Portal.
+ *
+ * The username and password are Base64-encoded at runtime to produce the HTTP Basic
+ * `Authorization` header value.
+ */
 public open class UsernamePasswordCredentialExtension @Inject constructor(objects: ObjectFactory) {
     public val username: Property<String> = objects.property<String>()
     public val password: Property<String> = objects.property<String>()
 }
 
+/**
+ * Fine-grained settings that control the upload and status-polling behaviour.
+ *
+ * Example:
+ * ```kotlin
+ * uploader {
+ *     maxStatusChecks = 30
+ *     statusCheckDelay = Duration.ofSeconds(15)
+ *     maxBundleSize = 512.megabytes   // or e.g. 1.gigabytes
+ * }
+ * ```
+ *
+ * @property maxStatusChecks Maximum number of deployment-status polls before the task fails
+ * with a timeout error. Default: 20.
+ * @property statusCheckDelay Delay between consecutive status polls. Default: 10 seconds.
+ * @property maxBundleSize Maximum size (in bytes) of a single upload bundle. When a bundle
+ * exceeds this limit it is automatically split into smaller chunks. Default: 256 MB.
+ * Use the [Int.megabytes] or [Int.gigabytes] extension properties for readable values.
+ */
 public open class UploaderSettingsExtension @Inject constructor(objects: ObjectFactory) {
 
     public val maxStatusChecks: Property<Int> = objects.property<Int>().convention(DEFAULT_MAX_STATUS_CHECKS)

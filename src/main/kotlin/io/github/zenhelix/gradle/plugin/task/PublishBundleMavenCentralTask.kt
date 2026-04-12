@@ -32,6 +32,18 @@ import org.gradle.api.tasks.TaskAction
 import org.gradle.work.DisableCachingByDefault
 import javax.inject.Inject
 
+/**
+ * Gradle task that publishes a single deployment bundle to the Maven Central Portal.
+ *
+ * The task uploads a ZIP bundle, then polls the Portal API until the deployment reaches a
+ * terminal state (published, validated in USER_MANAGED mode, or failed). On failure it
+ * attempts automatic recovery by dropping the deployment so it does not remain in an
+ * inconsistent state.
+ *
+ * This task is registered automatically by the plugin for each publication and is normally
+ * invoked through `publishAllPublicationsToMavenCentralPortalRepository` or the individual
+ * per-publication publish task.
+ */
 @DisableCachingByDefault(because = "Not worth caching - publishes to external service")
 public abstract class PublishBundleMavenCentralTask @Inject constructor(
     private val objects: ObjectFactory
