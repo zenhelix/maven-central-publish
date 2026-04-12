@@ -242,6 +242,15 @@ class DefaultMavenCentralApiClientTest {
             bundle = bundleFile
         )
 
+        // Verify the Content-Type header contains multipart boundary
+        val contentType = capturedRequest.captured.headers().firstValue("Content-Type").orElse("")
+        assertThat(contentType).startsWith("multipart/form-data; boundary=")
+
+        // Extract boundary and verify it's a valid UUID-derived string
+        val boundary = contentType.substringAfter("boundary=")
+        assertThat(boundary).isNotEmpty()
+        assertThat(boundary).matches("[0-9a-f]+")
+
         verify { mockHttpClient.send(any<HttpRequest>(), any<BodyHandler<String>>()) }
     }
 
