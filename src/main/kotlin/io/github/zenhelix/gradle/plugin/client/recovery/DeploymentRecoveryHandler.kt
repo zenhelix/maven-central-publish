@@ -3,9 +3,9 @@ package io.github.zenhelix.gradle.plugin.client.recovery
 import io.github.zenhelix.gradle.plugin.client.MavenCentralApiClient
 import io.github.zenhelix.gradle.plugin.client.model.Credentials
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentError
+import io.github.zenhelix.gradle.plugin.client.model.DeploymentId
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentStateType
 import io.github.zenhelix.gradle.plugin.client.model.isDroppable
-import java.util.UUID
 import org.gradle.api.logging.Logger
 
 internal class DeploymentRecoveryHandler(
@@ -13,7 +13,7 @@ internal class DeploymentRecoveryHandler(
     private val credentials: Credentials,
     private val logger: Logger
 ) {
-    suspend fun recover(deploymentId: UUID, error: DeploymentError): DeploymentError {
+    suspend fun recover(deploymentId: DeploymentId, error: DeploymentError): DeploymentError {
         if (error.isDroppable) {
             logger.warn("Deployment failed, attempting to drop deployment {}", deploymentId)
             client.tryDropDeployment(credentials, deploymentId, logger)
@@ -27,8 +27,8 @@ internal class DeploymentRecoveryHandler(
     }
 
     suspend fun recoverAll(
-        deploymentIds: List<UUID>,
-        lastKnownStates: Map<UUID, DeploymentStateType>,
+        deploymentIds: List<DeploymentId>,
+        lastKnownStates: Map<DeploymentId, DeploymentStateType>,
         error: DeploymentError
     ): DeploymentError {
         val (droppable, nonDroppable) = deploymentIds.partition { id ->
@@ -48,9 +48,9 @@ internal class DeploymentRecoveryHandler(
     }
 
     suspend fun recoverPublishFailure(
-        allIds: List<UUID>,
-        publishedIds: Set<UUID>,
-        failedId: UUID,
+        allIds: List<DeploymentId>,
+        publishedIds: Set<DeploymentId>,
+        failedId: DeploymentId,
         error: DeploymentError
     ): DeploymentError {
         val unpublished = allIds.filter { it !in publishedIds && it != failedId }

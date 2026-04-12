@@ -6,6 +6,7 @@ import io.github.zenhelix.gradle.plugin.client.createApiClient as createDefaultA
 import io.github.zenhelix.gradle.plugin.client.recovery.tryDropDeployment
 import io.github.zenhelix.gradle.plugin.client.model.Credentials
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentError
+import io.github.zenhelix.gradle.plugin.client.model.DeploymentId
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentStateType
 import io.github.zenhelix.gradle.plugin.client.model.Failure
 import io.github.zenhelix.gradle.plugin.client.model.PublishingType
@@ -17,7 +18,6 @@ import io.github.zenhelix.gradle.plugin.client.model.getOrThrow
 import io.github.zenhelix.gradle.plugin.client.model.toGradleException
 import java.io.File
 import java.time.Duration
-import java.util.UUID
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.gradle.api.DefaultTask
@@ -113,7 +113,7 @@ public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
         val client = createApiClient(baseUrl.get())
         return try {
             val recoveryHandler = DeploymentRecoveryHandler(client, creds, logger)
-            val lastKnownStates = mutableMapOf<UUID, DeploymentStateType>()
+            val lastKnownStates = mutableMapOf<DeploymentId, DeploymentStateType>()
 
             val uploadResult = uploadAllBundles(client, creds, bundleFiles, effectiveType, baseName)
             val deploymentIds = uploadResult.getOrNull() ?: return uploadResult.errorOrNull()
@@ -145,8 +145,8 @@ public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
         bundleFiles: List<File>,
         effectiveType: PublishingType?,
         baseName: String?
-    ): Outcome<List<UUID>, DeploymentError> {
-        val deploymentIds = mutableListOf<UUID>()
+    ): Outcome<List<DeploymentId>, DeploymentError> {
+        val deploymentIds = mutableListOf<DeploymentId>()
 
         val totalChunks = bundleFiles.size
         for ((index, bundleFile) in bundleFiles.withIndex()) {
@@ -201,13 +201,13 @@ public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
     private suspend fun waitForAllDeploymentsValidated(
         client: MavenCentralApiClient,
         creds: Credentials,
-        deploymentIds: List<UUID>,
+        deploymentIds: List<DeploymentId>,
         effectiveType: PublishingType?,
         maxChecks: Int,
         checkDelay: Duration,
-        lastKnownStates: MutableMap<UUID, DeploymentStateType>
+        lastKnownStates: MutableMap<DeploymentId, DeploymentStateType>
     ): Outcome<Unit, DeploymentError> {
-        val terminalStates = mutableMapOf<UUID, DeploymentStateType>()
+        val terminalStates = mutableMapOf<DeploymentId, DeploymentStateType>()
 
         repeat(maxChecks) { checkIndex ->
             val checkNumber = checkIndex + 1
@@ -276,12 +276,12 @@ public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
     private suspend fun publishAllDeployments(
         client: MavenCentralApiClient,
         creds: Credentials,
-        deploymentIds: List<UUID>,
+        deploymentIds: List<DeploymentId>,
         recoveryHandler: DeploymentRecoveryHandler
     ): Outcome<Unit, DeploymentError> {
         logger.lifecycle("Publishing all ${deploymentIds.size} deployment(s)...")
 
-        val publishedIds = mutableSetOf<UUID>()
+        val publishedIds = mutableSetOf<DeploymentId>()
 
         for (deploymentId in deploymentIds) {
             val result = client.publishDeployment(creds, deploymentId)

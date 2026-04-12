@@ -5,6 +5,7 @@ import io.github.zenhelix.gradle.plugin.client.MavenCentralApiClient
 import io.github.zenhelix.gradle.plugin.client.createApiClient as createDefaultApiClient
 import io.github.zenhelix.gradle.plugin.client.model.Credentials
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentError
+import io.github.zenhelix.gradle.plugin.client.model.DeploymentId
 import io.github.zenhelix.gradle.plugin.client.model.HttpResponseResult
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentStateType
 import io.github.zenhelix.gradle.plugin.client.model.Failure
@@ -15,7 +16,6 @@ import io.github.zenhelix.gradle.plugin.client.model.ValidationError
 import io.github.zenhelix.gradle.plugin.client.model.getOrThrow
 import io.github.zenhelix.gradle.plugin.client.model.toGradleException
 import java.time.Duration
-import java.util.UUID
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.gradle.api.DefaultTask
@@ -135,7 +135,7 @@ public abstract class PublishBundleMavenCentralTask @Inject constructor(
     private suspend fun waitForDeploymentCompletion(
         client: MavenCentralApiClient,
         creds: Credentials,
-        deploymentId: UUID,
+        deploymentId: DeploymentId,
         publishingType: PublishingType?,
         maxChecks: Int, checkDelay: Duration
     ): Outcome<Unit, DeploymentError> {
