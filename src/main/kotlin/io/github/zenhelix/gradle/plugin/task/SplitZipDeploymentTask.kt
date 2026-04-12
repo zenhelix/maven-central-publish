@@ -115,8 +115,11 @@ public abstract class SplitZipDeploymentTask : DefaultTask() {
             val entryPath = "${publication.artifactPath}/${checksumFile.asFile.name}"
             if (addedEntries.add(entryPath)) {
                 zos.putNextEntry(ZipEntry(entryPath))
-                checksumFile.asFile.inputStream().buffered().use { it.copyTo(zos) }
-                zos.closeEntry()
+                try {
+                    checksumFile.asFile.inputStream().buffered().use { it.copyTo(zos) }
+                } finally {
+                    zos.closeEntry()
+                }
             }
         }
 
@@ -124,8 +127,11 @@ public abstract class SplitZipDeploymentTask : DefaultTask() {
             val entryPath = "${publication.artifactPath}/${artifactInfo.artifactName}"
             if (addedEntries.add(entryPath)) {
                 zos.putNextEntry(ZipEntry(entryPath))
-                artifactInfo.file().inputStream().buffered().use { it.copyTo(zos) }
-                zos.closeEntry()
+                try {
+                    artifactInfo.file().inputStream().buffered().use { it.copyTo(zos) }
+                } finally {
+                    zos.closeEntry()
+                }
             }
         }
     }
