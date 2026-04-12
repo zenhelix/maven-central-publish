@@ -33,7 +33,7 @@ public enum class DeploymentStateType(internal val id: String) {
     UNKNOWN("");
 
     public companion object {
-        public fun ofOrNull(value: String): DeploymentStateType? = values().firstOrNull { it.id.equals(value, true) }
+        public fun ofOrNull(value: String): DeploymentStateType? = entries.firstOrNull { it.id.equals(value, ignoreCase = true) }
         public fun of(value: String): DeploymentStateType = ofOrNull(value) ?: UNKNOWN
     }
 }
