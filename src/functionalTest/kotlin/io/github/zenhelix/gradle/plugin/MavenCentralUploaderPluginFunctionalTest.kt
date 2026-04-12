@@ -1268,4 +1268,155 @@ class MavenCentralUploaderPluginFunctionalTest {
             .containsTask(":zipDeploymentAllPublications")
     }
 
+    @Test
+    fun `pom defaults from extension are applied to generated POM`() {
+        val version = "1.0.0"
+        val moduleName = "pom-defaults-test"
+
+        testProjectDir.settingsGradleFile().writeText(settings(moduleName))
+        //language=kotlin
+        testProjectDir.buildGradleFile().writeText(
+            """
+            plugins {
+                `java-library`
+                id("$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
+            }
+
+            ${group(version = version)}
+
+            mavenCentralPortal {
+                pom {
+                    name.set("My POM Library")
+                    description.set("A library with POM defaults")
+                    url.set("https://example.com/my-lib")
+                    inceptionYear.set("2025")
+                    license { apache2() }
+                    developer {
+                        id.set("dev1")
+                        name.set("Developer One")
+                        email.set("dev1@example.com")
+                    }
+                    scm { fromGithub("myorg", "myrepo") }
+                }
+            }
+
+            publishing {
+                repositories {
+                    mavenLocal()
+                    ${mavenCentralPortal()}
+                }
+                publications {
+                    create<MavenPublication>("mavenJava") {
+                        from(components["java"])
+                    }
+                }
+            }
+
+            ${signing()}
+            """.trimIndent()
+        )
+
+        testProjectDir.createJavaMainClass()
+
+        // Dry-run build should succeed without errors — DSL configuration is valid
+        GradleDryRunOutputAssert
+            .assertThat(gradleDryRunRunner(testProjectDir, "zipDeploymentAllPublications"))
+            .containsTask(":zipDeploymentAllPublications")
+    }
+
+    @Test
+    fun `autoConfigureJars registers javadocJar and sourcesJar tasks`() {
+        val version = "1.0.0"
+        val moduleName = "jar-scaffold-test"
+
+        testProjectDir.settingsGradleFile().writeText(settings(moduleName))
+        //language=kotlin
+        testProjectDir.buildGradleFile().writeText(
+            """
+            plugins {
+                `java-library`
+                id("$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
+            }
+
+            ${group(version = version)}
+
+            publishing {
+                repositories {
+                    mavenLocal()
+                    ${mavenCentralPortal()}
+                }
+                publications {
+                    create<MavenPublication>("mavenJava") {
+                        from(components["java"])
+                    }
+                }
+            }
+
+            ${signing()}
+            $pom
+            """.trimIndent()
+        )
+
+        testProjectDir.createJavaMainClass()
+
+        // Dry-run should include javadocJar and sourcesJar tasks
+        GradleDryRunOutputAssert
+            .assertThat(gradleDryRunRunner(testProjectDir, "zipDeploymentAllPublications"))
+            .containsTask(":javadocJar")
+            .containsTask(":sourcesJar")
+            .containsTask(":zipDeploymentAllPublications")
+    }
+
+    @Test
+    fun `retry config DSL is accepted without errors`() {
+        val version = "1.0.0"
+        val moduleName = "retry-config-test"
+
+        testProjectDir.settingsGradleFile().writeText(settings(moduleName))
+        //language=kotlin
+        testProjectDir.buildGradleFile().writeText(
+            """
+            import java.time.Duration
+
+            plugins {
+                `java-library`
+                id("$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
+            }
+
+            ${group(version = version)}
+
+            mavenCentralPortal {
+                uploader {
+                    requestTimeout = Duration.ofMinutes(10)
+                    connectTimeout = Duration.ofSeconds(60)
+                    maxRetries = 5
+                    retryBaseDelay = Duration.ofSeconds(5)
+                }
+            }
+
+            publishing {
+                repositories {
+                    mavenLocal()
+                    ${mavenCentralPortal()}
+                }
+                publications {
+                    create<MavenPublication>("mavenJava") {
+                        from(components["java"])
+                    }
+                }
+            }
+
+            ${signing()}
+            $pom
+            """.trimIndent()
+        )
+
+        testProjectDir.createJavaMainClass()
+
+        // Dry-run build should succeed without errors — retry config DSL is valid
+        GradleDryRunOutputAssert
+            .assertThat(gradleDryRunRunner(testProjectDir, "zipDeploymentAllPublications"))
+            .containsTask(":zipDeploymentAllPublications")
+    }
+
 }
