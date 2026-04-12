@@ -137,12 +137,9 @@ public class DefaultMavenCentralApiClient(
     }
 
     /**
-     * Closes the underlying HTTP client.
-     *
-     * On Java 21+, [HttpClient] implements [AutoCloseable] and connection pools
-     * are properly shut down. On Java 17-20, [HttpClient] does not implement
-     * [AutoCloseable] — connections are managed by the JVM's internal pool
-     * and cleaned up on GC. No explicit close is needed on these versions.
+     * Java 17-20 HttpClient doesn't implement AutoCloseable — the `is` check
+     * avoids calling close() on versions where it doesn't exist.
+     * Java 21+ requires explicit close for proper connection pool cleanup.
      */
     override fun close() {
         @Suppress("USELESS_IS_CHECK")
@@ -156,11 +153,15 @@ public class DefaultMavenCentralApiClient(
         }
     }
 
-    // ── DSL Builder ─────────────────────────────────────────────────────
+    private enum class HttpMethod { POST, DELETE }
 
+    /**
+     * Fluent builder for HTTP API calls. Isolates per-request configuration
+     * and provides a DSL for common patterns (auth, status expectation, logging).
+     */
     private inner class ApiCallBuilder<T : Any> {
         lateinit var uri: URI
-        private var method: String = "POST"
+        private var method: HttpMethod = HttpMethod.POST
         private var body: HttpRequest.BodyPublisher = noBody()
         private val headers: MutableMap<String, String> = mutableMapOf()
 
@@ -174,12 +175,12 @@ public class DefaultMavenCentralApiClient(
         }
 
         fun post(bodyPublisher: HttpRequest.BodyPublisher = noBody()) {
-            method = "POST"
+            method = HttpMethod.POST
             body = bodyPublisher
         }
 
         fun delete() {
-            method = "DELETE"
+            method = HttpMethod.DELETE
         }
 
         fun header(name: String, value: String) {
@@ -209,8 +210,8 @@ public class DefaultMavenCentralApiClient(
             headers.forEach { (name, value) -> builder.header(name, value) }
 
             when (method) {
-                "DELETE" -> builder.DELETE()
-                else -> builder.POST(body)
+                HttpMethod.DELETE -> builder.DELETE()
+                HttpMethod.POST -> builder.POST(body)
             }
 
             return builder.build()
