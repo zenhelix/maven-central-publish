@@ -25,12 +25,9 @@ public object BundleChunker {
         val chunks = mutableListOf<MutableChunk>()
 
         for (module in sorted) {
-            val target = chunks.firstOrNull { it.remainingCapacity(maxChunkSize) >= module.sizeBytes }
-            if (target != null) {
-                target.add(module)
-            } else {
-                chunks.add(MutableChunk().apply { add(module) })
-            }
+            chunks.firstOrNull { it.remainingCapacity(maxChunkSize) >= module.sizeBytes }
+                ?.add(module)
+                ?: chunks.add(MutableChunk().apply { add(module) })
         }
 
         return Success(chunks.map { Chunk(moduleNames = it.moduleNames, totalSize = it.totalSize) })
