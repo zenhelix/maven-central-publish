@@ -1,5 +1,7 @@
 package io.github.zenhelix.gradle.plugin.client.model
 
+import io.github.zenhelix.gradle.plugin.client.model.Success as OutcomeSuccess
+
 public sealed class HttpResponseResult<out S : Any, out E : Any>(
     public open val httpStatus: HttpStatus?,
     public open val httpHeaders: Map<String, List<String>>?
@@ -37,9 +39,8 @@ public sealed class HttpResponseResult<out S : Any, out E : Any>(
         is Success         -> null
     }
 
-    @Suppress("UNCHECKED_CAST")
     override fun <R> map(transform: (S) -> R): Outcome<R, E?> = when (this) {
-        is Success         -> Success(data = transform(data) as Any, httpStatus = httpStatus, httpHeaders = httpHeaders) as Outcome<R, E?>
+        is Success -> OutcomeSuccess(transform(data))
         is Error           -> this
         is UnexpectedError -> this
     }

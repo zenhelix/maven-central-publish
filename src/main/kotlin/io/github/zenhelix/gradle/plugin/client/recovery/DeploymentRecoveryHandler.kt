@@ -31,6 +31,11 @@ internal class DeploymentRecoveryHandler(
         lastKnownStates: Map<DeploymentId, DeploymentStateType>,
         error: DeploymentError
     ): DeploymentError {
+        val unknownStateIds = deploymentIds.filter { it !in lastKnownStates }
+        unknownStateIds.forEach { id ->
+            logger.warn("No known state for deployment {}; attempting drop as best effort", id)
+        }
+
         val (droppable, nonDroppable) = deploymentIds.partition { id ->
             val state = lastKnownStates[id]
             state == null || state.isDroppable

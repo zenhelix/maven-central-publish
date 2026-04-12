@@ -63,7 +63,14 @@ internal class RetryHandler(
     internal fun calculateBackoffDelay(attempt: Int): Long {
         val maxShift = 30
         val shift = (attempt - 1).coerceAtMost(maxShift)
-        return (baseDelay.toMillis() * (1L shl shift)).coerceAtMost(MAX_BACKOFF_DELAY_MILLIS)
+        val multiplier = 1L shl shift
+        val baseMs = baseDelay.toMillis()
+        // Overflow-safe: if multiplication would overflow Long, return max directly
+        return if (baseMs != 0L && multiplier > MAX_BACKOFF_DELAY_MILLIS / baseMs) {
+            MAX_BACKOFF_DELAY_MILLIS
+        } else {
+            (baseMs * multiplier).coerceAtMost(MAX_BACKOFF_DELAY_MILLIS)
+        }
     }
 
     internal companion object {

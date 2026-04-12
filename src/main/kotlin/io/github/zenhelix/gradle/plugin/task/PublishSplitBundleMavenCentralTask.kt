@@ -1,22 +1,20 @@
 package io.github.zenhelix.gradle.plugin.task
 
-import io.github.zenhelix.gradle.plugin.client.recovery.DeploymentRecoveryHandler
 import io.github.zenhelix.gradle.plugin.client.MavenCentralApiClient
-import io.github.zenhelix.gradle.plugin.client.createApiClient as createDefaultApiClient
-import io.github.zenhelix.gradle.plugin.client.recovery.tryDropDeployment
 import io.github.zenhelix.gradle.plugin.client.model.Credentials
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentError
-import io.github.zenhelix.gradle.plugin.client.model.HttpStatus
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentId
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentStateType
 import io.github.zenhelix.gradle.plugin.client.model.Failure
-import io.github.zenhelix.gradle.plugin.client.model.PublishingType
+import io.github.zenhelix.gradle.plugin.client.model.HttpStatus
 import io.github.zenhelix.gradle.plugin.client.model.Outcome
+import io.github.zenhelix.gradle.plugin.client.model.PublishingType
 import io.github.zenhelix.gradle.plugin.client.model.Success
 import io.github.zenhelix.gradle.plugin.client.model.ValidationError
-import io.github.zenhelix.gradle.plugin.client.model.isDroppable
 import io.github.zenhelix.gradle.plugin.client.model.getOrThrow
 import io.github.zenhelix.gradle.plugin.client.model.toGradleException
+import io.github.zenhelix.gradle.plugin.client.recovery.DeploymentRecoveryHandler
+import io.github.zenhelix.gradle.plugin.client.recovery.tryDropDeployment
 import java.io.File
 import java.time.Duration
 import kotlinx.coroutines.delay
@@ -32,6 +30,7 @@ import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.TaskAction
 import org.gradle.work.DisableCachingByDefault
+import io.github.zenhelix.gradle.plugin.client.createApiClient as createDefaultApiClient
 
 /**
  * Gradle task that publishes a set of split deployment bundle chunks to the Maven Central Portal.
@@ -300,9 +299,13 @@ public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
             }
         }
 
+        val pendingIds = deploymentIds.filter { it !in terminalStates }
+        val representativeState = pendingIds.firstNotNullOfOrNull { lastKnownStates[it] }
+            ?: DeploymentStateType.UNKNOWN
+
         return Failure(
             DeploymentError.Timeout(
-                state = lastKnownStates.values.lastOrNull() ?: DeploymentStateType.UNKNOWN,
+                state = representativeState,
                 maxChecks = maxChecks
             )
         )
