@@ -1,19 +1,9 @@
 package io.github.zenhelix.gradle.plugin.client.model
 
-public sealed class ResponseResult<out S : Any, out E : Any> {
-
-    public data class Success<out D : Any>(val data: D) : ResponseResult<D, Nothing>()
-
-    public data class Error<out E : Any>(val data: E? = null, val cause: Exception? = null) : ResponseResult<Nothing, E>()
-
-    public data class UnexpectedError(val cause: Exception) : ResponseResult<Nothing, Nothing>()
-
-}
-
 public sealed class HttpResponseResult<out S : Any, out E : Any>(
     public open val httpStatus: Int?,
     public open val httpHeaders: Map<String, List<String>>?
-) : ResponseResult<S, E>(), Outcome<S, E?> {
+) : Outcome<S, E?> {
 
     override fun <R> fold(onSuccess: (S) -> R, onFailure: (E?) -> R): R = when (this) {
         is Success         -> onSuccess(data)
@@ -50,40 +40,14 @@ public sealed class HttpResponseResult<out S : Any, out E : Any>(
     @Suppress("UNCHECKED_CAST")
     override fun <R> map(transform: (S) -> R): Outcome<R, E?> = when (this) {
         is Success         -> Success(data = transform(data) as Any, httpStatus = httpStatus, httpHeaders = httpHeaders) as Outcome<R, E?>
-        is Error           -> Error(data = data, cause = cause, httpStatus = httpStatus, httpHeaders = httpHeaders)
-        is UnexpectedError -> UnexpectedError(cause = cause, httpStatus = httpStatus, httpHeaders = httpHeaders)
+        is Error           -> this
+        is UnexpectedError -> this
     }
 
     override fun <R> flatMap(transform: (S) -> Outcome<R, @UnsafeVariance E?>): Outcome<R, E?> = when (this) {
         is Success         -> transform(data)
-        is Error           -> Error(data = data, cause = cause, httpStatus = httpStatus, httpHeaders = httpHeaders)
-        is UnexpectedError -> UnexpectedError(cause = cause, httpStatus = httpStatus, httpHeaders = httpHeaders)
-    }
-
-    public companion object {
-        public fun <S : Any, E : Any> of(result: ResponseResult<S, E>): HttpResponseResult<S, E> = when (result) {
-            is Error                          -> result
-            is Success                        -> result
-            is UnexpectedError                -> result
-
-            is ResponseResult.Error           -> Error(data = result.data, cause = result.cause, httpStatus = 0)
-            is ResponseResult.Success         -> Success(data = result.data, httpStatus = 0)
-            is ResponseResult.UnexpectedError -> UnexpectedError(cause = result.cause)
-        }
-
-        public fun <S : Any, E : Any> of(
-            result: ResponseResult<S, E>,
-            httpStatus: Int, httpHeaders: Map<String, List<String>> = emptyMap()
-        ): HttpResponseResult<S, E> = when (result) {
-            is Error                          -> result
-            is Success                        -> result
-            is UnexpectedError                -> result
-
-            is ResponseResult.Error           -> Error(data = result.data, cause = result.cause, httpStatus = httpStatus, httpHeaders = httpHeaders)
-            is ResponseResult.Success         -> Success(data = result.data, httpStatus = httpStatus, httpHeaders = httpHeaders)
-            is ResponseResult.UnexpectedError -> UnexpectedError(cause = result.cause, httpStatus = httpStatus, httpHeaders = httpHeaders)
-        }
-
+        is Error           -> this
+        is UnexpectedError -> this
     }
 
     public data class Success<out D : Any>(
@@ -120,23 +84,4 @@ public sealed class HttpResponseResult<out S : Any, out E : Any>(
         is Error           -> Error(data = error(current.data), cause = current.cause, httpStatus = current.httpStatus, httpHeaders = current.httpHeaders)
         is UnexpectedError -> current
     }
-
-    override fun equals(other: Any?): Boolean {
-        if (this === other) return true
-        if (other !is HttpResponseResult<*, *>) return false
-
-        if (httpStatus != other.httpStatus) return false
-        if (httpHeaders != other.httpHeaders) return false
-
-        return true
-    }
-
-    override fun hashCode(): Int {
-        var result = httpStatus ?: 0
-        result = 31 * result + (httpHeaders?.hashCode() ?: 0)
-        return result
-    }
-
-    override fun toString(): String = "HttpResponseResult(httpStatus=$httpStatus, httpHeaders=$httpHeaders)"
-
 }
