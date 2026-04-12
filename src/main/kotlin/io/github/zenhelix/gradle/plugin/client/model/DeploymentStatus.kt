@@ -1,9 +1,7 @@
 package io.github.zenhelix.gradle.plugin.client.model
 
-import java.util.UUID
-
 public data class DeploymentStatus(
-    val deploymentId: UUID,
+    val deploymentId: DeploymentId,
     val deploymentName: String,
     val deploymentState: DeploymentStateType,
     val purls: List<String>?,

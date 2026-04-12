@@ -1,7 +1,7 @@
 package io.github.zenhelix.gradle.plugin.client.model
 
 public sealed class HttpResponseResult<out S : Any, out E : Any>(
-    public open val httpStatus: Int?,
+    public open val httpStatus: HttpStatus?,
     public open val httpHeaders: Map<String, List<String>>?
 ) : Outcome<S, E?> {
 
@@ -12,9 +12,9 @@ public sealed class HttpResponseResult<out S : Any, out E : Any>(
     }
 
     public fun <R> foldHttp(
-        onSuccess: (data: S, httpStatus: Int, httpHeaders: Map<String, List<String>>) -> R,
-        onError: (data: E?, cause: Exception?, httpStatus: Int, httpHeaders: Map<String, List<String>>) -> R,
-        onUnexpected: (cause: Exception, httpStatus: Int?, httpHeaders: Map<String, List<String>>?) -> R
+        onSuccess: (data: S, httpStatus: HttpStatus, httpHeaders: Map<String, List<String>>) -> R,
+        onError: (data: E?, cause: Exception?, httpStatus: HttpStatus, httpHeaders: Map<String, List<String>>) -> R,
+        onUnexpected: (cause: Exception, httpStatus: HttpStatus?, httpHeaders: Map<String, List<String>>?) -> R
     ): R = when (this) {
         is Success         -> onSuccess(data, httpStatus, httpHeaders)
         is Error           -> onError(data, cause, httpStatus, httpHeaders)
@@ -52,20 +52,20 @@ public sealed class HttpResponseResult<out S : Any, out E : Any>(
 
     public data class Success<out D : Any>(
         val data: D,
-        override val httpStatus: Int = 200,
+        override val httpStatus: HttpStatus = HttpStatus.OK,
         override val httpHeaders: Map<String, List<String>> = emptyMap()
     ) : HttpResponseResult<D, Nothing>(httpStatus = httpStatus, httpHeaders = httpHeaders)
 
     public data class Error<out E : Any>(
         val data: E? = null,
         val cause: Exception? = null,
-        override val httpStatus: Int,
+        override val httpStatus: HttpStatus,
         override val httpHeaders: Map<String, List<String>> = emptyMap()
     ) : HttpResponseResult<Nothing, E>(httpStatus = httpStatus, httpHeaders = httpHeaders)
 
     public data class UnexpectedError(
         val cause: Exception,
-        override val httpStatus: Int? = null,
+        override val httpStatus: HttpStatus? = null,
         override val httpHeaders: Map<String, List<String>>? = null
     ) : HttpResponseResult<Nothing, Nothing>(httpStatus = httpStatus, httpHeaders = httpHeaders)
 
