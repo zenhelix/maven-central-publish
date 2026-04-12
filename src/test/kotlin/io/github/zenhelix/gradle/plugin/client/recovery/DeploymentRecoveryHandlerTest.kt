@@ -74,7 +74,7 @@ class DeploymentRecoveryHandlerTest {
     }
 
     @Test
-    fun `recoverPublishFailure drops unpublished deployments only`() = runTest {
+    fun `recoverPublishFailure drops failed and unpublished deployments`() = runTest {
         coEvery { client.dropDeployment(any(), any()) } returns HttpResponseResult.Success(Unit)
         val id1 = DeploymentId.fromString("11111111-1111-1111-1111-111111111111")
         val id2 = DeploymentId.fromString("22222222-2222-2222-2222-222222222222")
@@ -86,7 +86,7 @@ class DeploymentRecoveryHandlerTest {
         createHandler().recoverPublishFailure(listOf(id1, id2, id3), publishedIds, failedId, error)
 
         coVerify(exactly = 0) { client.dropDeployment(creds, id1) }
-        coVerify(exactly = 0) { client.dropDeployment(creds, id2) }
+        coVerify(exactly = 1) { client.dropDeployment(creds, id2) }
         coVerify(exactly = 1) { client.dropDeployment(creds, id3) }
     }
 }

@@ -132,11 +132,10 @@ class PublishSplitBundleDropBehaviorTest {
         assertThatThrownBy { executePublishSplitTask(bundlesDir) }
             .isInstanceOf(MavenCentralDeploymentException::class.java)
 
-        // handlePublishFailure should NOT drop id1 (already published) or id2 (the failed one)
-        // It should only drop remaining unpublished deployments (none in this case —
-        // id1 is published, id2 is the failed one)
-        // The key assertion: drop should NOT be called for id1 (already published)
+        // handlePublishFailure should NOT drop id1 (already published)
+        // but SHOULD drop id2 (the failed deployment — still in VALIDATED state)
         coVerify(exactly = 0) { mockClient.dropDeployment(any(), eq(id1)) }
+        coVerify(exactly = 1) { mockClient.dropDeployment(any(), eq(id2)) }
     }
 
     @Test

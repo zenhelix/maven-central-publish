@@ -53,7 +53,7 @@ internal class DeploymentRecoveryHandler(
         failedId: DeploymentId,
         error: DeploymentError
     ): DeploymentError {
-        val unpublished = allIds.filter { it !in publishedIds && it != failedId }
+        val unpublished = allIds.filter { it !in publishedIds }
         unpublished.forEach { client.tryDropDeployment(credentials, it, logger) }
 
         logger.warn(
