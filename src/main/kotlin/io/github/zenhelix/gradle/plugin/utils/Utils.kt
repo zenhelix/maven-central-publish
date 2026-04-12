@@ -6,7 +6,7 @@ import io.github.zenhelix.gradle.plugin.client.model.Outcome
 import io.github.zenhelix.gradle.plugin.client.model.Success
 import io.github.zenhelix.gradle.plugin.client.model.ValidationError
 import io.github.zenhelix.gradle.plugin.extension.MavenCentralUploaderExtension
-import io.github.zenhelix.gradle.plugin.extension.PublishingType
+import io.github.zenhelix.gradle.plugin.extension.PublishingMode
 import io.github.zenhelix.gradle.plugin.task.ArtifactFileInfo
 import io.github.zenhelix.gradle.plugin.task.ArtifactInfo
 import io.github.zenhelix.gradle.plugin.task.CreateChecksumTask
@@ -69,7 +69,7 @@ internal fun MavenPublicationInternal.mapModel(
     checksumFiles = checksumTask.flatMap { it.checksumFiles }
 )
 
-internal fun PublishingType.mapModel(): io.github.zenhelix.gradle.plugin.client.model.PublishingType = when (this) {
-    PublishingType.AUTOMATIC -> io.github.zenhelix.gradle.plugin.client.model.PublishingType.AUTOMATIC
-    PublishingType.USER_MANAGED -> io.github.zenhelix.gradle.plugin.client.model.PublishingType.USER_MANAGED
+internal fun PublishingMode.mapModel(): io.github.zenhelix.gradle.plugin.client.model.PublishingType = when (this) {
+    PublishingMode.AUTOMATIC -> io.github.zenhelix.gradle.plugin.client.model.PublishingType.AUTOMATIC
+    PublishingMode.USER_MANAGED -> io.github.zenhelix.gradle.plugin.client.model.PublishingType.USER_MANAGED
 }

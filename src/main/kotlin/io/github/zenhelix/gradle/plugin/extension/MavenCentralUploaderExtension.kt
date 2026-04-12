@@ -1,6 +1,6 @@
 package io.github.zenhelix.gradle.plugin.extension
 
-import io.github.zenhelix.gradle.plugin.extension.PublishingType.AUTOMATIC
+import io.github.zenhelix.gradle.plugin.extension.PublishingMode.AUTOMATIC
 import java.time.Duration
 import org.gradle.api.Action
 import org.gradle.api.model.ObjectFactory
@@ -19,7 +19,7 @@ public open class MavenCentralUploaderExtension @Inject constructor(objects: Obj
         configure.execute(credentials)
     }
 
-    public val publishingType: Property<PublishingType> = objects.property<PublishingType>().convention(AUTOMATIC)
+    public val publishingType: Property<PublishingMode> = objects.property<PublishingMode>().convention(AUTOMATIC)
 
     public val deploymentName: Property<String> = objects.property<String>()
 
