@@ -37,28 +37,39 @@ public open class MavenCentralUploaderExtension @Inject constructor(objects: Obj
 
 public open class MavenCentralUploaderCredentialExtension @Inject constructor(objects: ObjectFactory) {
 
-    // Tracks whether each block was entered (not whether properties are set).
-    // This allows better error messages: `bearer { }` without token.set() reports
-    // "Bearer token is not set" rather than the generic "No credentials configured".
-    private var bearerConfigured: Boolean = false
-    private var usernamePasswordConfigured: Boolean = false
+    private sealed interface CredentialMode {
+        data object None : CredentialMode
+        data object Bearer : CredentialMode
+        data object UsernamePassword : CredentialMode
+        data object Both : CredentialMode
+    }
+
+    private var mode: CredentialMode = CredentialMode.None
 
     public val bearer: BearerCredentialExtension = objects.newInstance<BearerCredentialExtension>()
     public val usernamePassword: UsernamePasswordCredentialExtension =
         objects.newInstance<UsernamePasswordCredentialExtension>()
 
     public fun bearer(configure: Action<BearerCredentialExtension>) {
-        bearerConfigured = true
+        mode = when (mode) {
+            CredentialMode.None -> CredentialMode.Bearer
+            CredentialMode.UsernamePassword -> CredentialMode.Both
+            else -> mode
+        }
         configure.execute(bearer)
     }
 
     public fun usernamePassword(configure: Action<UsernamePasswordCredentialExtension>) {
-        usernamePasswordConfigured = true
+        mode = when (mode) {
+            CredentialMode.None -> CredentialMode.UsernamePassword
+            CredentialMode.Bearer -> CredentialMode.Both
+            else -> mode
+        }
         configure.execute(usernamePassword)
     }
 
-    public val isBearerConfigured: Boolean get() = bearerConfigured
-    public val isUsernamePasswordConfigured: Boolean get() = usernamePasswordConfigured
+    public val isBearerConfigured: Boolean get() = mode == CredentialMode.Bearer || mode == CredentialMode.Both
+    public val isUsernamePasswordConfigured: Boolean get() = mode == CredentialMode.UsernamePassword || mode == CredentialMode.Both
 }
 
 public open class BearerCredentialExtension @Inject constructor(objects: ObjectFactory) {
@@ -80,6 +91,6 @@ public open class UploaderSettingsExtension @Inject constructor(objects: ObjectF
     public companion object {
         public const val DEFAULT_MAX_STATUS_CHECKS: Int = 20
         public val DEFAULT_STATUS_CHECK_DELAY: Duration = Duration.ofSeconds(10)
-        public const val DEFAULT_MAX_BUNDLE_SIZE: Long = 256L * 1024L * 1024L // 256 MB
+        public val DEFAULT_MAX_BUNDLE_SIZE: Long = 256.megabytes
     }
 }

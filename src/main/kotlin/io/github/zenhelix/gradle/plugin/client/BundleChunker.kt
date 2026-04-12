@@ -14,11 +14,8 @@ public object BundleChunker {
     public fun chunk(modules: List<ModuleSize>, maxChunkSize: Long): Outcome<List<Chunk>, ChunkError> {
         if (modules.isEmpty()) return Success(emptyList())
 
-        modules.forEach { module ->
-            if (module.sizeBytes > maxChunkSize) {
-                return Failure(ChunkError.ModuleTooLarge(module.name, module.sizeBytes, maxChunkSize))
-            }
-        }
+        modules.firstOrNull { it.sizeBytes > maxChunkSize }
+            ?.let { return Failure(ChunkError.ModuleTooLarge(it.name, it.sizeBytes, maxChunkSize)) }
 
         val sorted = modules.sortedByDescending { it.sizeBytes }
 
