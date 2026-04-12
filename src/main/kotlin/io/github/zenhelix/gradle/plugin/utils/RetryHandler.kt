@@ -33,6 +33,10 @@ internal class RetryHandler(
             when (result) {
                 is Success -> return result
                 is Failure -> {
+                    if (result.error is kotlin.coroutines.cancellation.CancellationException) {
+                        throw result.error
+                    }
+
                     lastError = result.error
 
                     if (!shouldRetry(result.error)) {
