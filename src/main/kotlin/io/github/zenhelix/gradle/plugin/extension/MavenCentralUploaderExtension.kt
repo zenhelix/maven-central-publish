@@ -148,6 +148,10 @@ public open class UsernamePasswordCredentialExtension @Inject constructor(object
  *     maxStatusChecks = 30
  *     statusCheckDelay = Duration.ofSeconds(15)
  *     maxBundleSize = 512.megabytes   // or e.g. 1.gigabytes
+ *     requestTimeout = Duration.ofMinutes(10)
+ *     connectTimeout = Duration.ofSeconds(60)
+ *     maxRetries = 5
+ *     retryBaseDelay = Duration.ofSeconds(5)
  * }
  * ```
  *
@@ -157,6 +161,13 @@ public open class UsernamePasswordCredentialExtension @Inject constructor(object
  * @property maxBundleSize Maximum size (in bytes) of a single upload bundle. When a bundle
  * exceeds this limit it is automatically split into smaller chunks. Default: 256 MB.
  * Use the [Int.megabytes] or [Int.gigabytes] extension properties for readable values.
+ * @property requestTimeout Timeout for individual HTTP requests to the Maven Central Portal API.
+ * Default: 5 minutes.
+ * @property connectTimeout Timeout for establishing an HTTP connection to the Maven Central Portal API.
+ * Default: 30 seconds.
+ * @property maxRetries Maximum number of retry attempts for retriable HTTP failures (e.g. 5xx,
+ * connection errors). Default: 3.
+ * @property retryBaseDelay Base delay between retry attempts. Default: 2 seconds.
  */
 public open class UploaderSettingsExtension @Inject constructor(objects: ObjectFactory) {
 
@@ -164,10 +175,18 @@ public open class UploaderSettingsExtension @Inject constructor(objects: ObjectF
     public val statusCheckDelay: Property<Duration> =
         objects.property<Duration>().convention(DEFAULT_STATUS_CHECK_DELAY)
     public val maxBundleSize: Property<Long> = objects.property<Long>().convention(DEFAULT_MAX_BUNDLE_SIZE)
+    public val requestTimeout: Property<Duration> = objects.property<Duration>().convention(DEFAULT_REQUEST_TIMEOUT)
+    public val connectTimeout: Property<Duration> = objects.property<Duration>().convention(DEFAULT_CONNECT_TIMEOUT)
+    public val maxRetries: Property<Int> = objects.property<Int>().convention(DEFAULT_MAX_RETRIES)
+    public val retryBaseDelay: Property<Duration> = objects.property<Duration>().convention(DEFAULT_RETRY_BASE_DELAY)
 
     public companion object {
         public const val DEFAULT_MAX_STATUS_CHECKS: Int = 20
         public val DEFAULT_STATUS_CHECK_DELAY: Duration = Duration.ofSeconds(10)
         public val DEFAULT_MAX_BUNDLE_SIZE: Long = 256.megabytes
+        public val DEFAULT_REQUEST_TIMEOUT: Duration = Duration.ofMinutes(5)
+        public val DEFAULT_CONNECT_TIMEOUT: Duration = Duration.ofSeconds(30)
+        public const val DEFAULT_MAX_RETRIES: Int = 3
+        public val DEFAULT_RETRY_BASE_DELAY: Duration = Duration.ofSeconds(2)
     }
 }

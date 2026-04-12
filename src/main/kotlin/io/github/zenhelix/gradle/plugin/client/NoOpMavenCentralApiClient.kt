@@ -7,6 +7,7 @@ import io.github.zenhelix.gradle.plugin.client.model.DeploymentStatus
 import io.github.zenhelix.gradle.plugin.client.model.HttpResponseResult
 import io.github.zenhelix.gradle.plugin.client.model.PublishingType
 import java.nio.file.Path
+import java.time.Duration
 
 /**
  * No-op API client for functional testing. Returns successful responses
@@ -54,5 +55,12 @@ internal const val TEST_BASE_URL = "https://test.invalid"
  * Returns [NoOpMavenCentralApiClient] when [url] matches [TEST_BASE_URL],
  * otherwise creates a real [DefaultMavenCentralApiClient].
  */
-internal fun createApiClient(url: String): MavenCentralApiClient =
-    if (url == TEST_BASE_URL) NoOpMavenCentralApiClient() else DefaultMavenCentralApiClient(url)
+internal fun createApiClient(
+    url: String,
+    requestTimeout: Duration = Duration.ofMinutes(5),
+    connectTimeout: Duration = Duration.ofSeconds(30),
+    maxRetries: Int = 3,
+    retryBaseDelay: Duration = Duration.ofSeconds(2)
+): MavenCentralApiClient =
+    if (url == TEST_BASE_URL) NoOpMavenCentralApiClient()
+    else DefaultMavenCentralApiClient(url, requestTimeout = requestTimeout, connectTimeout = connectTimeout, maxRetries = maxRetries, retryDelay = retryBaseDelay)

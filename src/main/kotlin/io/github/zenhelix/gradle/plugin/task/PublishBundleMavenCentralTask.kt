@@ -73,7 +73,25 @@ public abstract class PublishBundleMavenCentralTask @Inject constructor(
     @get:Input
     public abstract val statusCheckDelay: Property<Duration>
 
-    protected open fun createApiClient(url: String): MavenCentralApiClient = createDefaultApiClient(url)
+    @get:Input
+    public abstract val requestTimeout: Property<Duration>
+
+    @get:Input
+    public abstract val connectTimeout: Property<Duration>
+
+    @get:Input
+    public abstract val maxRetries: Property<Int>
+
+    @get:Input
+    public abstract val retryBaseDelay: Property<Duration>
+
+    protected open fun createApiClient(
+        url: String,
+        requestTimeout: Duration,
+        connectTimeout: Duration,
+        maxRetries: Int,
+        retryBaseDelay: Duration
+    ): MavenCentralApiClient = createDefaultApiClient(url, requestTimeout, connectTimeout, maxRetries, retryBaseDelay)
 
     init {
         group = PUBLISH_TASK_GROUP
@@ -82,6 +100,10 @@ public abstract class PublishBundleMavenCentralTask @Inject constructor(
         publishingType.convention(PublishingType.AUTOMATIC)
         maxStatusChecks.convention(20)
         statusCheckDelay.convention(Duration.ofSeconds(10))
+        requestTimeout.convention(Duration.ofMinutes(5))
+        connectTimeout.convention(Duration.ofSeconds(30))
+        maxRetries.convention(3)
+        retryBaseDelay.convention(Duration.ofSeconds(2))
     }
 
     @TaskAction
@@ -106,7 +128,7 @@ public abstract class PublishBundleMavenCentralTask @Inject constructor(
 
         logger.lifecycle("Publishing deployment bundle: ${bundleFile.name}. Publishing type: ${type ?: PublishingType.AUTOMATIC}. Deployment name: $name")
 
-        val apiClient = createApiClient(baseUrl.get())
+        val apiClient = createApiClient(baseUrl.get(), requestTimeout.get(), connectTimeout.get(), maxRetries.get(), retryBaseDelay.get())
         return try {
             val recoveryHandler = DeploymentRecoveryHandler(apiClient, creds, logger)
 

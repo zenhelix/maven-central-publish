@@ -209,5 +209,11 @@ internal abstract class TestPublishBundleTask @Inject constructor(
     @get:org.gradle.api.tasks.Internal
     var testClient: MavenCentralApiClient? = null
 
-    override fun createApiClient(url: String): MavenCentralApiClient = testClient!!
+    override fun createApiClient(
+        url: String,
+        requestTimeout: java.time.Duration,
+        connectTimeout: java.time.Duration,
+        maxRetries: Int,
+        retryBaseDelay: java.time.Duration
+    ): MavenCentralApiClient = testClient!!
 }

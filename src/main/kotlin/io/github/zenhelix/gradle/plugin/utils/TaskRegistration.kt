@@ -106,6 +106,10 @@ internal fun Project.registerPublishSplitAllModulesTask(
     deploymentName.set(mavenCentralUploaderExtension.deploymentName)
     maxStatusChecks.set(mavenCentralUploaderExtension.uploader.maxStatusChecks)
     statusCheckDelay.set(mavenCentralUploaderExtension.uploader.statusCheckDelay)
+    requestTimeout.set(mavenCentralUploaderExtension.uploader.requestTimeout)
+    connectTimeout.set(mavenCentralUploaderExtension.uploader.connectTimeout)
+    maxRetries.set(mavenCentralUploaderExtension.uploader.maxRetries)
+    retryBaseDelay.set(mavenCentralUploaderExtension.uploader.retryBaseDelay)
 
     configuration()
 }
@@ -121,6 +125,10 @@ private fun Project.registerPublishBundleMavenCentralTask(
     deploymentName.set(mavenCentralUploaderExtension.deploymentName)
     maxStatusChecks.set(mavenCentralUploaderExtension.uploader.maxStatusChecks)
     statusCheckDelay.set(mavenCentralUploaderExtension.uploader.statusCheckDelay)
+    requestTimeout.set(mavenCentralUploaderExtension.uploader.requestTimeout)
+    connectTimeout.set(mavenCentralUploaderExtension.uploader.connectTimeout)
+    maxRetries.set(mavenCentralUploaderExtension.uploader.maxRetries)
+    retryBaseDelay.set(mavenCentralUploaderExtension.uploader.retryBaseDelay)
 
     configuration()
 }
