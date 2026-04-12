@@ -1,7 +1,6 @@
 package io.github.zenhelix.gradle.plugin.client.model
 
 import io.github.zenhelix.gradle.plugin.utils.toDisplayMB
-import org.gradle.api.GradleException
 
 public sealed class ChunkError(public val message: String) {
     public data class ModuleTooLarge(val moduleName: String, val moduleSize: Long, val maxSize: Long)
@@ -12,4 +11,5 @@ public sealed class ChunkError(public val message: String) {
         )
 }
 
-public fun ChunkError.toGradleException(): GradleException = GradleException(message)
+public fun ChunkError.toGradleException(): MavenCentralChunkException =
+    MavenCentralChunkException(error = this, message = message)

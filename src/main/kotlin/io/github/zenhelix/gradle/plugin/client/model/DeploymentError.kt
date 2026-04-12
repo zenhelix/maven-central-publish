@@ -1,7 +1,6 @@
 package io.github.zenhelix.gradle.plugin.client.model
 
 import java.util.UUID
-import org.gradle.api.GradleException
 
 public sealed class DeploymentError(public val message: String) {
     public data class UploadFailed(val httpStatus: Int, val response: String?)
@@ -39,11 +38,11 @@ public sealed class DeploymentError(public val message: String) {
     }
 }
 
-public fun DeploymentError.toGradleException(): GradleException = when (this) {
-    is DeploymentError.UploadUnexpected -> GradleException(message, cause)
-    is DeploymentError.StatusCheckUnexpected -> GradleException(message, cause)
-    is DeploymentError.PublishUnexpected -> GradleException(message, cause)
-    else -> GradleException(message)
+public fun DeploymentError.toGradleException(): MavenCentralDeploymentException = when (this) {
+    is DeploymentError.UploadUnexpected -> MavenCentralDeploymentException(error = this, message = message, cause = cause)
+    is DeploymentError.StatusCheckUnexpected -> MavenCentralDeploymentException(error = this, message = message, cause = cause)
+    is DeploymentError.PublishUnexpected -> MavenCentralDeploymentException(error = this, message = message, cause = cause)
+    else -> MavenCentralDeploymentException(error = this, message = message)
 }
 
 internal val DeploymentStateType.isDroppable: Boolean

@@ -216,21 +216,18 @@ public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
                         val state = status.deploymentState
                         lastKnownStates[deploymentId] = state
 
-                        when {
-                            state == DeploymentStateType.FAILED || state == DeploymentStateType.UNKNOWN -> {
+                        when (state) {
+                            DeploymentStateType.FAILED, DeploymentStateType.UNKNOWN -> {
                                 DeploymentError.DeploymentFailed(state, status.errors)
                             }
-
-                            state == DeploymentStateType.PUBLISHED -> {
+                            DeploymentStateType.PUBLISHED -> {
                                 terminalStates[deploymentId] = state
                                 null
                             }
-
-                            state == DeploymentStateType.VALIDATED && effectiveType == PublishingType.USER_MANAGED -> {
+                            DeploymentStateType.VALIDATED if effectiveType == PublishingType.USER_MANAGED -> {
                                 terminalStates[deploymentId] = state
                                 null
                             }
-
                             else -> null
                         }
                     },

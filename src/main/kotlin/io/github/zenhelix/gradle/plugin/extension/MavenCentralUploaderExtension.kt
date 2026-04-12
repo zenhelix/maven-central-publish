@@ -13,8 +13,7 @@ public open class MavenCentralUploaderExtension @Inject constructor(objects: Obj
 
     public val baseUrl: Property<String> = objects.property<String>().convention(DEFAULT_CENTRAL_MAVEN_PORTAL_BASE_URL)
 
-    public val credentials: MavenCentralUploaderCredentialExtension =
-        objects.newInstance<MavenCentralUploaderCredentialExtension>()
+    public val credentials: MavenCentralUploaderCredentialExtension = objects.newInstance<MavenCentralUploaderCredentialExtension>()
 
     public fun credentials(configure: Action<MavenCentralUploaderCredentialExtension>) {
         configure.execute(credentials)

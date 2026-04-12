@@ -54,18 +54,22 @@ class DeploymentErrorTest {
     }
 
     @Test
-    fun `toGradleException preserves cause for UploadUnexpected`() {
+    fun `toGradleException returns MavenCentralDeploymentException with cause for UploadUnexpected`() {
         val cause = RuntimeException("timeout")
         val error = DeploymentError.UploadUnexpected(cause)
         val gradleEx = error.toGradleException()
+        assertThat(gradleEx).isInstanceOf(MavenCentralDeploymentException::class.java)
+        assertThat(gradleEx.error).isSameAs(error)
         assertThat(gradleEx.cause).isSameAs(cause)
         assertThat(gradleEx.message).isEqualTo("Unexpected error during bundle upload")
     }
 
     @Test
-    fun `toGradleException has no cause for UploadFailed`() {
+    fun `toGradleException returns MavenCentralDeploymentException without cause for UploadFailed`() {
         val error = DeploymentError.UploadFailed(400, "Bad Request")
         val gradleEx = error.toGradleException()
+        assertThat(gradleEx).isInstanceOf(MavenCentralDeploymentException::class.java)
+        assertThat(gradleEx.error).isSameAs(error)
         assertThat(gradleEx.cause).isNull()
         assertThat(gradleEx.message).isEqualTo("Failed to upload bundle: HTTP 400")
     }

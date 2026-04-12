@@ -1,7 +1,5 @@
 package io.github.zenhelix.gradle.plugin.client.model
 
-import org.gradle.api.GradleException
-
 public sealed class ValidationError(public val message: String) {
     public data class MissingProperty(val property: String)
         : ValidationError("Property '$property' is required but not set")
@@ -22,4 +20,5 @@ public sealed class ValidationError(public val message: String) {
     )
 }
 
-public fun ValidationError.toGradleException(): GradleException = GradleException(message)
+public fun ValidationError.toGradleException(): MavenCentralValidationException =
+    MavenCentralValidationException(error = this, message = message)

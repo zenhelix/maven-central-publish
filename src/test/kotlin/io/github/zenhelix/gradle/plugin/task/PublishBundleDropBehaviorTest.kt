@@ -13,6 +13,7 @@ import java.io.File
 import java.nio.file.Path
 import java.time.Duration
 import java.util.UUID
+import io.github.zenhelix.gradle.plugin.client.model.MavenCentralDeploymentException
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.gradle.api.GradleException
 import org.gradle.api.model.ObjectFactory
@@ -82,7 +83,7 @@ class PublishBundleDropBehaviorTest {
         every { mockClient.dropDeployment(any(), any()) } returns HttpResponseResult.Success(Unit)
 
         assertThatThrownBy { executePublishTask() }
-            .isInstanceOf(GradleException::class.java)
+            .isInstanceOf(MavenCentralDeploymentException::class.java)
             .hasMessageContaining("did not complete after 2 status checks")
 
         verify(exactly = 1) { mockClient.dropDeployment(any(), eq(deploymentId)) }
@@ -94,7 +95,7 @@ class PublishBundleDropBehaviorTest {
         every { mockClient.dropDeployment(any(), any()) } returns HttpResponseResult.Success(Unit)
 
         assertThatThrownBy { executePublishTask() }
-            .isInstanceOf(GradleException::class.java)
+            .isInstanceOf(MavenCentralDeploymentException::class.java)
 
         verify(exactly = 1) { mockClient.dropDeployment(any(), eq(deploymentId)) }
     }
@@ -104,7 +105,7 @@ class PublishBundleDropBehaviorTest {
         every { mockClient.deploymentStatus(any(), any()) } returns statusReturning(DeploymentStateType.PUBLISHING)
 
         assertThatThrownBy { executePublishTask() }
-            .isInstanceOf(GradleException::class.java)
+            .isInstanceOf(MavenCentralDeploymentException::class.java)
             .hasMessageContaining("PUBLISHING")
 
         verify(exactly = 0) { mockClient.dropDeployment(any(), any()) }
@@ -124,7 +125,7 @@ class PublishBundleDropBehaviorTest {
         every { mockClient.dropDeployment(any(), any()) } returns HttpResponseResult.Success(Unit)
 
         assertThatThrownBy { executePublishTask() }
-            .isInstanceOf(GradleException::class.java)
+            .isInstanceOf(MavenCentralDeploymentException::class.java)
             .hasMessageContaining("FAILED")
 
         verify(exactly = 1) { mockClient.dropDeployment(any(), eq(deploymentId)) }
@@ -151,7 +152,7 @@ class PublishBundleDropBehaviorTest {
 
         // Should still throw the timeout exception, but NOT crash on the drop failure
         assertThatThrownBy { executePublishTask() }
-            .isInstanceOf(GradleException::class.java)
+            .isInstanceOf(MavenCentralDeploymentException::class.java)
             .hasMessageContaining("did not complete after 2 status checks")
 
         // Drop was attempted (state was droppable at check time) but failed gracefully
@@ -169,7 +170,7 @@ class PublishBundleDropBehaviorTest {
         every { mockClient.dropDeployment(any(), any()) } returns HttpResponseResult.Success(Unit)
 
         assertThatThrownBy { executePublishTask() }
-            .isInstanceOf(GradleException::class.java)
+            .isInstanceOf(MavenCentralDeploymentException::class.java)
             .hasMessageContaining("Failed to check deployment status")
 
         verify(exactly = 1) { mockClient.dropDeployment(any(), eq(deploymentId)) }

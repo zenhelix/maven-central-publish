@@ -143,7 +143,7 @@ class SplitZipDeploymentTaskTest {
         }.get()
 
         assertThatThrownBy { task.createSplitZips() }
-            .isInstanceOf(GradleException::class.java)
+            .isInstanceOf(io.github.zenhelix.gradle.plugin.client.model.MavenCentralChunkException::class.java)
             .hasMessageContaining(":big")
     }
 }

@@ -5,6 +5,7 @@ import io.github.zenhelix.gradle.plugin.client.model.Credentials.BearerTokenCred
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentStateType
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentStatus
 import io.github.zenhelix.gradle.plugin.client.model.HttpResponseResult
+import io.github.zenhelix.gradle.plugin.client.model.MavenCentralDeploymentException
 import io.github.zenhelix.gradle.plugin.client.model.PublishingType
 import io.mockk.every
 import io.mockk.mockk
@@ -80,7 +81,7 @@ class PublishSplitBundleDropBehaviorTest {
         every { mockClient.dropDeployment(any(), any()) } returns HttpResponseResult.Success(Unit)
 
         assertThatThrownBy { executePublishSplitTask(bundlesDir) }
-            .isInstanceOf(GradleException::class.java)
+            .isInstanceOf(MavenCentralDeploymentException::class.java)
             .hasMessageContaining("did not complete after 2 status checks")
 
         verify(exactly = 1) { mockClient.dropDeployment(any(), eq(deploymentId)) }
@@ -93,7 +94,7 @@ class PublishSplitBundleDropBehaviorTest {
         every { mockClient.deploymentStatus(any(), any()) } returns statusReturning(DeploymentStateType.PUBLISHING)
 
         assertThatThrownBy { executePublishSplitTask(bundlesDir) }
-            .isInstanceOf(GradleException::class.java)
+            .isInstanceOf(MavenCentralDeploymentException::class.java)
 
         verify(exactly = 0) { mockClient.dropDeployment(any(), any()) }
     }
@@ -129,7 +130,7 @@ class PublishSplitBundleDropBehaviorTest {
         every { mockClient.dropDeployment(any(), any()) } returns HttpResponseResult.Success(Unit)
 
         assertThatThrownBy { executePublishSplitTask(bundlesDir) }
-            .isInstanceOf(GradleException::class.java)
+            .isInstanceOf(MavenCentralDeploymentException::class.java)
 
         // handlePublishFailure should NOT drop id1 (already published) or id2 (the failed one)
         // It should only drop remaining unpublished deployments (none in this case —
