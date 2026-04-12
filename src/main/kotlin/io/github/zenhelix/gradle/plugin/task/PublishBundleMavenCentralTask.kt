@@ -1,6 +1,6 @@
 package io.github.zenhelix.gradle.plugin.task
 
-import io.github.zenhelix.gradle.plugin.client.DeploymentRecoveryHandler
+import io.github.zenhelix.gradle.plugin.client.recovery.DeploymentRecoveryHandler
 import io.github.zenhelix.gradle.plugin.client.MavenCentralApiClient
 import io.github.zenhelix.gradle.plugin.client.createApiClient as createDefaultApiClient
 import io.github.zenhelix.gradle.plugin.client.model.Credentials

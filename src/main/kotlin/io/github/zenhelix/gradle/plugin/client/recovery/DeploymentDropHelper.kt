@@ -1,5 +1,6 @@
-package io.github.zenhelix.gradle.plugin.client
+package io.github.zenhelix.gradle.plugin.client.recovery
 
+import io.github.zenhelix.gradle.plugin.client.MavenCentralApiClient
 import io.github.zenhelix.gradle.plugin.client.model.Credentials
 import io.github.zenhelix.gradle.plugin.client.model.HttpResponseResult
 import java.util.UUID

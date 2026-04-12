@@ -1,5 +1,6 @@
-package io.github.zenhelix.gradle.plugin.client
+package io.github.zenhelix.gradle.plugin.client.recovery
 
+import io.github.zenhelix.gradle.plugin.client.MavenCentralApiClient
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentError
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentStateType
 import io.github.zenhelix.gradle.plugin.client.model.HttpResponseResult
