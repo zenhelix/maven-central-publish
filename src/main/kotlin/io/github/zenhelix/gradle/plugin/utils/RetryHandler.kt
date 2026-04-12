@@ -72,7 +72,7 @@ public class RetryHandler(
     }
 
     internal companion object {
-        internal const val MAX_BACKOFF_DELAY_MILLIS: Long = 5 * 60 * 1000L
+        internal const val MAX_BACKOFF_DELAY_MILLIS = 5 * 60 * 1000L
     }
 }
 

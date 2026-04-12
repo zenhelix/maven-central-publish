@@ -300,9 +300,9 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
         public const val MAVEN_CENTRAL_PORTAL_NAME: String = "mavenCentralPortal"
         public const val MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID: String = "io.github.zenhelix.maven-central-publish"
 
-        private val PUBLISH_ALL_PUBLICATIONS_TASK_NAME: String =
+        private val PUBLISH_ALL_PUBLICATIONS_TASK_NAME =
             "publishAllPublicationsTo${MAVEN_CENTRAL_PORTAL_NAME.capitalized()}Repository"
 
-        private const val WARN_REGISTERED_FLAG: String = "io.github.zenhelix.maven-central-publish.warnRegistered"
+        private const val WARN_REGISTERED_FLAG = "io.github.zenhelix.maven-central-publish.warnRegistered"
     }
 }
