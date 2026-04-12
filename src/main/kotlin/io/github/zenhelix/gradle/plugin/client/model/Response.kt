@@ -49,16 +49,15 @@ public sealed class HttpResponseResult<out S : Any, out E : Any>(
 
     @Suppress("UNCHECKED_CAST")
     override fun <R> map(transform: (S) -> R): Outcome<R, E?> = when (this) {
-        is Success         -> Success(transform(data) as Any, httpStatus, httpHeaders) as Outcome<R, E?>
-        is Error           -> this as Outcome<R, E?>
-        is UnexpectedError -> this as Outcome<R, E?>
+        is Success         -> Success(data = transform(data) as Any, httpStatus = httpStatus, httpHeaders = httpHeaders) as Outcome<R, E?>
+        is Error           -> Error(data = data, cause = cause, httpStatus = httpStatus, httpHeaders = httpHeaders)
+        is UnexpectedError -> UnexpectedError(cause = cause, httpStatus = httpStatus, httpHeaders = httpHeaders)
     }
 
-    @Suppress("UNCHECKED_CAST")
     override fun <R> flatMap(transform: (S) -> Outcome<R, @UnsafeVariance E?>): Outcome<R, E?> = when (this) {
         is Success         -> transform(data)
-        is Error           -> this as Outcome<R, E?>
-        is UnexpectedError -> this as Outcome<R, E?>
+        is Error           -> Error(data = data, cause = cause, httpStatus = httpStatus, httpHeaders = httpHeaders)
+        is UnexpectedError -> UnexpectedError(cause = cause, httpStatus = httpStatus, httpHeaders = httpHeaders)
     }
 
     public companion object {
@@ -118,15 +117,6 @@ public sealed class HttpResponseResult<out S : Any, out E : Any>(
         error: (E?) -> OE?
     ): HttpResponseResult<S, OE> = when (val current = this) {
         is Success         -> current
-        is Error           -> Error(data = error(current.data), cause = current.cause, httpStatus = current.httpStatus, httpHeaders = current.httpHeaders)
-        is UnexpectedError -> current
-    }
-
-    @Suppress("UNCHECKED_CAST")
-    public fun <OS : Any, OE : Any> copy(
-        data: (S) -> OS = { it as OS }, error: (E?) -> OE? = { it as OE }
-    ): HttpResponseResult<OS, OE> = when (val current = this) {
-        is Success         -> Success(data = data(current.data), httpStatus = current.httpStatus, httpHeaders = current.httpHeaders)
         is Error           -> Error(data = error(current.data), cause = current.cause, httpStatus = current.httpStatus, httpHeaders = current.httpHeaders)
         is UnexpectedError -> current
     }
