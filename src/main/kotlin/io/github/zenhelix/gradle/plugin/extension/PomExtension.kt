@@ -88,9 +88,9 @@ public open class PomLicenseBuilder @Inject constructor(objects: ObjectFactory) 
     }
 
     internal fun build(): PomLicenseData {
-        requireNotNull(name.orNull) { "License 'name' is required. Use a preset (e.g., apache2()) or set name.set(\"...\")." }
+        val licenseName = requireNotNull(name.orNull) { "License 'name' is required. Use a preset (e.g., apache2()) or set name.set(\"...\")." }
         return PomLicenseData(
-            name = name.orNull,
+            name = licenseName,
             url = url.orNull,
             distribution = distribution.orNull
         )

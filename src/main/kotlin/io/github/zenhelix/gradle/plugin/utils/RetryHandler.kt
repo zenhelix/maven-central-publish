@@ -25,19 +25,14 @@ internal class RetryHandler(
         onRetry: ((attempt: Int, exception: Exception) -> Unit)? = null
     ): Outcome<T, Exception> {
         var attempt = 1
-        var lastError: Exception? = null
 
         while (attempt <= maxRetries) {
-            val result = operation(attempt)
-
-            when (result) {
+            when (val result = operation(attempt)) {
                 is Success -> return result
                 is Failure -> {
                     if (result.error is kotlin.coroutines.cancellation.CancellationException) {
                         throw result.error
                     }
-
-                    lastError = result.error
 
                     if (!shouldRetry(result.error)) {
                         logger.debug("Exception is not retriable, failing immediately: {}", result.error.message)
@@ -62,7 +57,7 @@ internal class RetryHandler(
             attempt++
         }
 
-        return Failure(lastError ?: Exception("Operation failed after $maxRetries attempts"))
+        error("Unreachable: loop always returns on last attempt")
     }
 
     internal fun calculateBackoffDelay(attempt: Int): Long {

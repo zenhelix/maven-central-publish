@@ -7,7 +7,10 @@ import io.github.zenhelix.gradle.plugin.client.model.Success
 import io.github.zenhelix.gradle.plugin.client.model.ValidationError
 import io.github.zenhelix.gradle.plugin.extension.MavenCentralUploaderExtension
 import org.gradle.api.Project
+import org.gradle.api.provider.Property
 import org.gradle.api.provider.Provider
+
+private fun Property<String>.orBlankAsNull(): String? = orNull?.takeIf { it.isNotBlank() }
 
 internal fun Project.mapCredentials(
     extension: MavenCentralUploaderExtension
@@ -21,14 +24,14 @@ internal fun Project.mapCredentials(
             ))
         }
         creds.isBearerConfigured -> {
-            val token = creds.bearer.token.orNull?.takeIf { it.isNotBlank() }
+            val token = creds.bearer.token.orBlankAsNull()
                 ?: return@provider Failure(ValidationError.MissingCredential("Bearer token is not set or blank. Configure: credentials { bearer { token.set(\"...\") } }"))
             Success(Credentials.BearerTokenCredentials(token))
         }
         creds.isUsernamePasswordConfigured -> {
-            val username = creds.usernamePassword.username.orNull?.takeIf { it.isNotBlank() }
+            val username = creds.usernamePassword.username.orBlankAsNull()
                 ?: return@provider Failure(ValidationError.MissingCredential("Username is not set or blank. Configure: credentials { usernamePassword { username.set(\"...\") } }"))
-            val password = creds.usernamePassword.password.orNull?.takeIf { it.isNotBlank() }
+            val password = creds.usernamePassword.password.orBlankAsNull()
                 ?: return@provider Failure(ValidationError.MissingCredential("Password is not set or blank. Configure: credentials { usernamePassword { password.set(\"...\") } }"))
             Success(Credentials.UsernamePasswordCredentials(username, password))
         }
