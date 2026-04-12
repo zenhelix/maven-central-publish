@@ -25,18 +25,18 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 
-class MavenCentralApiClientImplTest {
+class DefaultMavenCentralApiClientTest {
 
     @TempDir
     private lateinit var tempDir: Path
 
     private lateinit var mockHttpClient: HttpClient
-    private lateinit var client: MavenCentralApiClientImpl
+    private lateinit var client: DefaultMavenCentralApiClient
 
     @BeforeEach
     fun setUp() {
         mockHttpClient = mockk()
-        client = MavenCentralApiClientImpl(baseUrl = "https://test", httpClient = mockHttpClient)
+        client = DefaultMavenCentralApiClient(baseUrl = "https://test", httpClient = mockHttpClient)
     }
 
     @AfterEach

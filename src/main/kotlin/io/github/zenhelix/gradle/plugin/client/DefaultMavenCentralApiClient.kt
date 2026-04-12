@@ -32,7 +32,7 @@ import kotlinx.coroutines.withContext
 import org.gradle.api.logging.Logger
 import org.gradle.api.logging.Logging
 
-public class MavenCentralApiClientImpl(
+public class DefaultMavenCentralApiClient(
     private val baseUrl: String,
     httpClient: HttpClient? = null,
     private val requestTimeout: Duration = Duration.ofMinutes(5),
@@ -41,7 +41,7 @@ public class MavenCentralApiClientImpl(
     retryDelay: Duration = Duration.ofSeconds(2)
 ) : MavenCentralApiClient {
 
-    private val logger: Logger = Logging.getLogger(MavenCentralApiClientImpl::class.java)
+    private val logger: Logger = Logging.getLogger(DefaultMavenCentralApiClient::class.java)
     private val objectMapper: ObjectMapper = jacksonObjectMapper()
     private val retryHandler: RetryHandler = RetryHandler(maxRetries, retryDelay, logger)
 

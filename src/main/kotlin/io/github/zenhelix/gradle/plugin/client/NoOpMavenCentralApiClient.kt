@@ -52,7 +52,7 @@ internal const val TEST_BASE_URL = "https://test.invalid"
 /**
  * Creates an [MavenCentralApiClient] for the given [url].
  * Returns [NoOpMavenCentralApiClient] when [url] matches [TEST_BASE_URL],
- * otherwise creates a real [MavenCentralApiClientImpl].
+ * otherwise creates a real [DefaultMavenCentralApiClient].
  */
 internal fun createApiClient(url: String): MavenCentralApiClient =
-    if (url == TEST_BASE_URL) NoOpMavenCentralApiClient() else MavenCentralApiClientImpl(url)
+    if (url == TEST_BASE_URL) NoOpMavenCentralApiClient() else DefaultMavenCentralApiClient(url)
