@@ -78,4 +78,73 @@ class CredentialMappingTest {
         val error = assertFailure<ValidationError.MissingCredential>(result)
         assertThat(error.message).contains("Bearer token is not set")
     }
+
+    @Test
+    fun `empty bearer token should produce MissingCredential error`() {
+        val extension = createExtension()
+        extension.credentials {
+            bearer { token.set("") }
+        }
+
+        val result = project.mapCredentials(extension).get()
+        val error = assertFailure<ValidationError.MissingCredential>(result)
+        assertThat(error.message).contains("Bearer token is not set or blank")
+    }
+
+    @Test
+    fun `blank bearer token should produce MissingCredential error`() {
+        val extension = createExtension()
+        extension.credentials {
+            bearer { token.set("   ") }
+        }
+
+        val result = project.mapCredentials(extension).get()
+        val error = assertFailure<ValidationError.MissingCredential>(result)
+        assertThat(error.message).contains("Bearer token is not set or blank")
+    }
+
+    @Test
+    fun `empty username should produce MissingCredential error`() {
+        val extension = createExtension()
+        extension.credentials {
+            usernamePassword {
+                username.set("")
+                password.set("test-pass")
+            }
+        }
+
+        val result = project.mapCredentials(extension).get()
+        val error = assertFailure<ValidationError.MissingCredential>(result)
+        assertThat(error.message).contains("Username is not set or blank")
+    }
+
+    @Test
+    fun `blank username should produce MissingCredential error`() {
+        val extension = createExtension()
+        extension.credentials {
+            usernamePassword {
+                username.set("   ")
+                password.set("test-pass")
+            }
+        }
+
+        val result = project.mapCredentials(extension).get()
+        val error = assertFailure<ValidationError.MissingCredential>(result)
+        assertThat(error.message).contains("Username is not set or blank")
+    }
+
+    @Test
+    fun `empty password should produce MissingCredential error`() {
+        val extension = createExtension()
+        extension.credentials {
+            usernamePassword {
+                username.set("test-user")
+                password.set("")
+            }
+        }
+
+        val result = project.mapCredentials(extension).get()
+        val error = assertFailure<ValidationError.MissingCredential>(result)
+        assertThat(error.message).contains("Password is not set or blank")
+    }
 }
