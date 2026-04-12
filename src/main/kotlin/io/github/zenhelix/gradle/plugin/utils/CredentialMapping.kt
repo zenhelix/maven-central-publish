@@ -21,21 +21,16 @@ internal fun Project.mapCredentials(
             ))
         }
         creds.isBearerConfigured -> {
-            val token = creds.bearer.token.orNull
-            if (token != null) {
-                Success(Credentials.BearerTokenCredentials(token))
-            } else {
-                Failure(ValidationError.MissingCredential("Bearer token is not set. Configure: credentials { bearer { token.set(\"...\") } }"))
-            }
+            creds.bearer.token.orNull
+                ?.let { Success(Credentials.BearerTokenCredentials(it)) }
+                ?: Failure(ValidationError.MissingCredential("Bearer token is not set. Configure: credentials { bearer { token.set(\"...\") } }"))
         }
         creds.isUsernamePasswordConfigured -> {
             val username = creds.usernamePassword.username.orNull
+                ?: return@provider Failure(ValidationError.MissingCredential("Username is not set. Configure: credentials { usernamePassword { username.set(\"...\") } }"))
             val password = creds.usernamePassword.password.orNull
-            when {
-                username == null -> Failure(ValidationError.MissingCredential("Username is not set. Configure: credentials { usernamePassword { username.set(\"...\") } }"))
-                password == null -> Failure(ValidationError.MissingCredential("Password is not set. Configure: credentials { usernamePassword { password.set(\"...\") } }"))
-                else -> Success(Credentials.UsernamePasswordCredentials(username, password))
-            }
+                ?: return@provider Failure(ValidationError.MissingCredential("Password is not set. Configure: credentials { usernamePassword { password.set(\"...\") } }"))
+            Success(Credentials.UsernamePasswordCredentials(username, password))
         }
         else -> {
             Failure(ValidationError.NoCredentials)
