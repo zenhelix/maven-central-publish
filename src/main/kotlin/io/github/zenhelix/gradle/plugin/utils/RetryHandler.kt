@@ -7,7 +7,7 @@ import java.time.Duration
 import kotlinx.coroutines.delay
 import org.gradle.api.logging.Logger
 
-public class RetryHandler(
+internal class RetryHandler(
     private val maxRetries: Int,
     private val baseDelay: Duration,
     private val logger: Logger
@@ -19,7 +19,7 @@ public class RetryHandler(
         }
     }
 
-    public suspend fun <T> executeWithRetry(
+    suspend fun <T> executeWithRetry(
         operation: suspend (attempt: Int) -> Outcome<T, Exception>,
         shouldRetry: (Exception) -> Boolean = { true },
         onRetry: ((attempt: Int, exception: Exception) -> Unit)? = null

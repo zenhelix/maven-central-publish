@@ -13,7 +13,7 @@ public class MavenCentralDeploymentException(
     cause: Exception? = null
 ) : GradleException(message, cause)
 
-public class MavenCentralChunkException(
-    public val error: ChunkError,
+internal class MavenCentralChunkException(
+    val error: ChunkError,
     message: String
 ) : GradleException(message)

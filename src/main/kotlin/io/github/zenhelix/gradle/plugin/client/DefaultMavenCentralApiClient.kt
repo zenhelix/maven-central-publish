@@ -34,7 +34,7 @@ import kotlinx.coroutines.withContext
 import org.gradle.api.logging.Logger
 import org.gradle.api.logging.Logging
 
-public class DefaultMavenCentralApiClient(
+internal class DefaultMavenCentralApiClient(
     private val baseUrl: String,
     httpClient: HttpClient? = null,
     private val requestTimeout: Duration = Duration.ofMinutes(5),
