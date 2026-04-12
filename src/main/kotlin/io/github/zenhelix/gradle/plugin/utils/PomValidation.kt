@@ -5,11 +5,10 @@ import io.github.zenhelix.gradle.plugin.client.model.Outcome
 import io.github.zenhelix.gradle.plugin.client.model.Success
 
 internal data class PomValidationError(
-    val publicationName: String,
     val missingFields: List<String>
 ) {
     fun toMessage(): String =
-        "Publication '$publicationName' is missing required POM fields for Maven Central: ${missingFields.joinToString(", ")}. " +
+        "Missing required POM fields for Maven Central: ${missingFields.joinToString(", ")}. " +
             "Configure them via mavenCentralPortal { pom { ... } } or the standard publishing { publications { ... { pom { ... } } } } block."
 }
 
@@ -33,6 +32,6 @@ internal fun validatePomFields(
     return if (missing.isEmpty()) {
         Success(Unit)
     } else {
-        Failure(PomValidationError(publicationName = "", missingFields = missing))
+        Failure(PomValidationError(missingFields = missing))
     }
 }

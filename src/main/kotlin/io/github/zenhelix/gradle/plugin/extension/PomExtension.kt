@@ -36,10 +36,10 @@ public open class PomExtension @Inject constructor(private val objects: ObjectFa
     public val inceptionYear: Property<String> = objects.property<String>()
 
     private val _licenses: MutableList<PomLicenseData> = mutableListOf()
-    public val licenses: List<PomLicenseData> get() = _licenses.toList()
+    public val licenses: List<PomLicenseData> get() = _licenses
 
     private val _developers: MutableList<PomDeveloperData> = mutableListOf()
-    public val developers: List<PomDeveloperData> get() = _developers.toList()
+    public val developers: List<PomDeveloperData> get() = _developers
 
     public val scm: PomScmExtension = objects.newInstance<PomScmExtension>()
 
@@ -70,32 +70,18 @@ public open class PomLicenseBuilder @Inject constructor(objects: ObjectFactory) 
     public val distribution: Property<String> = objects.property<String>().convention("repo")
 
     /** Apply Apache License 2.0 preset values. */
-    public fun apache2() {
-        val preset = LicensePresets.apache2()
-        name.set(preset.name)
-        url.set(preset.url)
-        distribution.set(preset.distribution)
-    }
+    public fun apache2(): Unit = applyPreset(LicensePresets.apache2())
 
     /** Apply MIT License preset values. */
-    public fun mit() {
-        val preset = LicensePresets.mit()
-        name.set(preset.name)
-        url.set(preset.url)
-        distribution.set(preset.distribution)
-    }
+    public fun mit(): Unit = applyPreset(LicensePresets.mit())
 
     /** Apply BSD 2-Clause License preset values. */
-    public fun bsd2() {
-        val preset = LicensePresets.bsd2()
-        name.set(preset.name)
-        url.set(preset.url)
-        distribution.set(preset.distribution)
-    }
+    public fun bsd2(): Unit = applyPreset(LicensePresets.bsd2())
 
     /** Apply BSD 3-Clause License preset values. */
-    public fun bsd3() {
-        val preset = LicensePresets.bsd3()
+    public fun bsd3(): Unit = applyPreset(LicensePresets.bsd3())
+
+    private fun applyPreset(preset: PomLicenseData) {
         name.set(preset.name)
         url.set(preset.url)
         distribution.set(preset.distribution)
