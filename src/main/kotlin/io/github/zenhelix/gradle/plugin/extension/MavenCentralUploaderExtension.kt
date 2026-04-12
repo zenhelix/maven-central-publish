@@ -52,6 +52,11 @@ public open class MavenCentralUploaderExtension @Inject constructor(objects: Obj
         configure.execute(uploader)
     }
 
+    public val pom: PomExtension = objects.newInstance<PomExtension>()
+    public fun pom(configure: Action<PomExtension>) {
+        configure.execute(pom)
+    }
+
     public companion object {
         public const val MAVEN_CENTRAL_UPLOADER_EXTENSION_NAME: String = "mavenCentralPortal"
 
