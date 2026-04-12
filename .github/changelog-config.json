@@ -2,53 +2,46 @@
   "categories": [
     {
       "title": "## Breaking Changes",
-      "labels": [
-        "breaking-change"
-      ]
+      "labels": ["breaking-change"]
     },
     {
       "title": "## New Features",
-      "labels": [
-        "feature",
-        "enhancement",
-        "feat"
-      ]
+      "labels": ["feature", "enhancement", "feat"]
     },
     {
       "title": "## Bug Fixes",
-      "labels": [
-        "bug",
-        "fix"
-      ]
+      "labels": ["bug", "fix"]
     },
     {
       "title": "## Build & CI",
-      "labels": [
-        "build",
-        "ci"
-      ]
+      "labels": ["build", "ci"]
     },
     {
       "title": "## Documentation",
-      "labels": [
-        "documentation",
-        "docs"
-      ]
+      "labels": ["documentation", "docs"]
     },
     {
       "title": "## Dependencies",
-      "labels": [
-        "dependencies"
-      ]
+      "labels": ["dependencies"]
+    },
+    {
+      "title": "## Performance",
+      "labels": ["perf", "performance"]
+    },
+    {
+      "title": "## Refactoring",
+      "labels": ["refactor"]
+    },
+    {
+      "title": "## Tests",
+      "labels": ["test", "tests"]
     },
     {
       "title": "## Other Changes",
       "labels": []
     }
   ],
-  "ignore_labels": [
-    "ignore-changelog"
-  ],
+  "ignore_labels": ["ignore-changelog"],
   "sort": {
     "order": "ASC",
     "on_property": "mergedAt"
@@ -78,7 +71,5 @@
   "tag_resolver": {
     "method": "semver"
   },
-  "base_branches": [
-    "main"
-  ]
+  "base_branches": ["main"]
 }
