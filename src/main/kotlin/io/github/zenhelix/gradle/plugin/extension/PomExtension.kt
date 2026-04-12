@@ -87,11 +87,14 @@ public open class PomLicenseBuilder @Inject constructor(objects: ObjectFactory) 
         distribution.set(preset.distribution)
     }
 
-    internal fun build(): PomLicenseData = PomLicenseData(
-        name = name.orNull,
-        url = url.orNull,
-        distribution = distribution.orNull
-    )
+    internal fun build(): PomLicenseData {
+        requireNotNull(name.orNull) { "License 'name' is required. Use a preset (e.g., apache2()) or set name.set(\"...\")." }
+        return PomLicenseData(
+            name = name.orNull,
+            url = url.orNull,
+            distribution = distribution.orNull
+        )
+    }
 }
 
 /**
@@ -104,12 +107,17 @@ public open class PomDeveloperBuilder @Inject constructor(objects: ObjectFactory
     public val email: Property<String> = objects.property<String>()
     public val url: Property<String> = objects.property<String>()
 
-    internal fun build(): PomDeveloperData = PomDeveloperData(
-        id = id.orNull,
-        name = name.orNull,
-        email = email.orNull,
-        url = url.orNull
-    )
+    internal fun build(): PomDeveloperData {
+        require(id.orNull != null || name.orNull != null) {
+            "Developer must have at least 'id' or 'name'. Set developer { id.set(\"...\") } or developer { name.set(\"...\") }."
+        }
+        return PomDeveloperData(
+            id = id.orNull,
+            name = name.orNull,
+            email = email.orNull,
+            url = url.orNull
+        )
+    }
 }
 
 /**

@@ -1,9 +1,34 @@
 package io.github.zenhelix.gradle.plugin.extension
 
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
+import org.gradle.kotlin.dsl.newInstance
+import org.gradle.testfixtures.ProjectBuilder
 import org.junit.jupiter.api.Test
 
 class PomExtensionTest {
+
+    private val project = ProjectBuilder.builder().build()
+
+    @Test
+    fun `license builder should throw when name is not set`() {
+        val extension = project.objects.newInstance<PomExtension>()
+
+        assertThatThrownBy {
+            extension.license { /* empty */ }
+        }.isInstanceOf(IllegalArgumentException::class.java)
+         .hasMessageContaining("name")
+    }
+
+    @Test
+    fun `developer builder should throw when neither id nor name is set`() {
+        val extension = project.objects.newInstance<PomExtension>()
+
+        assertThatThrownBy {
+            extension.developer { /* empty */ }
+        }.isInstanceOf(IllegalArgumentException::class.java)
+         .hasMessageContaining("id")
+    }
 
     @Test
     fun `apache2 license preset returns correct values`() {
