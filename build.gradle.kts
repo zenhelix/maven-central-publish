@@ -46,22 +46,22 @@ testing {
             if (this is JvmTestSuite) {
                 useJUnitJupiter()
                 dependencies {
-                    implementation("org.assertj:assertj-core:3.27.7")
+                    implementation(libs.assertj.core)
                 }
             }
         }
 
         val test by getting(JvmTestSuite::class) {
             dependencies {
-                implementation("io.mockk:mockk:1.14.9")
-                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
+                implementation(libs.mockk)
+                implementation(libs.coroutines.test)
             }
         }
         val functionalTest by registering(JvmTestSuite::class) {
             dependencies {
                 implementation(project())
                 implementation(gradleTestKit())
-                implementation("org.bouncycastle:bcpg-jdk18on:1.83")
+                implementation(libs.bouncycastle.bcpg)
             }
 
             targets {
@@ -127,9 +127,9 @@ gradlePlugin {
 }
 
 dependencies {
-    compileOnly("org.jetbrains.kotlin:kotlin-gradle-plugin:2.3.20")
-    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.21.2")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
+    compileOnly(libs.kotlin.gradle.plugin)
+    implementation(libs.jackson.module.kotlin)
+    implementation(libs.coroutines.core)
 }
 
 publishing {
