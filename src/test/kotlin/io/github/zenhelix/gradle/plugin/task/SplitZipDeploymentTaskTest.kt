@@ -1,7 +1,7 @@
 package io.github.zenhelix.gradle.plugin.task
 
 import org.gradle.api.GradleException
-import io.github.zenhelix.gradle.plugin.utils.megabytes
+import io.github.zenhelix.gradle.plugin.extension.megabytes
 import java.io.File
 import java.util.zip.ZipFile
 import org.assertj.core.api.Assertions.assertThat

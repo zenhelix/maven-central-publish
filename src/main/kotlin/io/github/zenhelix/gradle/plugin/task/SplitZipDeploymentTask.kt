@@ -1,11 +1,11 @@
 package io.github.zenhelix.gradle.plugin.task
 
 import io.github.zenhelix.gradle.plugin.client.model.toGradleException
-import io.github.zenhelix.gradle.plugin.utils.BundleChunker
-import io.github.zenhelix.gradle.plugin.utils.Chunk
-import io.github.zenhelix.gradle.plugin.utils.ModuleSize
-import io.github.zenhelix.gradle.plugin.utils.toDisplayKB
-import io.github.zenhelix.gradle.plugin.utils.toDisplayMB
+import io.github.zenhelix.gradle.plugin.client.BundleChunker
+import io.github.zenhelix.gradle.plugin.client.Chunk
+import io.github.zenhelix.gradle.plugin.client.ModuleSize
+import io.github.zenhelix.gradle.plugin.extension.toDisplayKB
+import io.github.zenhelix.gradle.plugin.extension.toDisplayMB
 import java.io.File
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream

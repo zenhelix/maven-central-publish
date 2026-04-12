@@ -1,4 +1,4 @@
-package io.github.zenhelix.gradle.plugin.utils
+package io.github.zenhelix.gradle.plugin.extension
 
 internal const val BYTES_PER_KB = 1024L
 internal const val BYTES_PER_MB = 1024L * 1024L

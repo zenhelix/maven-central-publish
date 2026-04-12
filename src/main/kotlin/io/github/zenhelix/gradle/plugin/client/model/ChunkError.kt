@@ -1,6 +1,6 @@
 package io.github.zenhelix.gradle.plugin.client.model
 
-import io.github.zenhelix.gradle.plugin.utils.toDisplayMB
+import io.github.zenhelix.gradle.plugin.extension.toDisplayMB
 
 public sealed class ChunkError(public val message: String) {
     public data class ModuleTooLarge(val moduleName: String, val moduleSize: Long, val maxSize: Long)

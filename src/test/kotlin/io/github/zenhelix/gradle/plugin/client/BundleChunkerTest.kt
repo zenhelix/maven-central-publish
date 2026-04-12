@@ -1,4 +1,4 @@
-package io.github.zenhelix.gradle.plugin.utils
+package io.github.zenhelix.gradle.plugin.client
 
 import io.github.zenhelix.gradle.plugin.client.model.ChunkError
 import io.github.zenhelix.gradle.plugin.client.model.Failure
