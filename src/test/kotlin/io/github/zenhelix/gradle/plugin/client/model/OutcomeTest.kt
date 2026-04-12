@@ -1,6 +1,7 @@
 package io.github.zenhelix.gradle.plugin.client.model
 
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 
 class OutcomeTest {
@@ -81,5 +82,68 @@ class OutcomeTest {
     fun `getOrElse returns default for Failure`() {
         val result: Outcome<Int, String> = Failure("error")
         assertThat(result.getOrElse { -1 }).isEqualTo(-1)
+    }
+
+    @Test
+    fun `getOrThrow returns value for Success`() {
+        val result: Outcome<Int, String> = Success(42)
+        assertThat(result.getOrThrow { RuntimeException(it) }).isEqualTo(42)
+    }
+
+    @Test
+    fun `getOrThrow throws transformed error for Failure`() {
+        val result: Outcome<Int, String> = Failure("boom")
+        assertThatThrownBy {
+            result.getOrThrow { IllegalStateException(it) }
+        }.isInstanceOf(IllegalStateException::class.java)
+            .hasMessage("boom")
+    }
+
+    @Test
+    fun `onSuccess executes action for Success and returns self`() {
+        val result: Outcome<Int, String> = Success(42)
+        var captured = 0
+        val returned = result.onSuccess { captured = it }
+        assertThat(captured).isEqualTo(42)
+        assertThat(returned).isSameAs(result)
+    }
+
+    @Test
+    fun `onSuccess does not execute action for Failure`() {
+        val result: Outcome<Int, String> = Failure("error")
+        var called = false
+        result.onSuccess { called = true }
+        assertThat(called).isFalse()
+    }
+
+    @Test
+    fun `onFailure executes action for Failure and returns self`() {
+        val result: Outcome<Int, String> = Failure("error")
+        var captured = ""
+        val returned = result.onFailure { captured = it }
+        assertThat(captured).isEqualTo("error")
+        assertThat(returned).isSameAs(result)
+    }
+
+    @Test
+    fun `onFailure does not execute action for Success`() {
+        val result: Outcome<Int, String> = Success(42)
+        var called = false
+        result.onFailure { called = true }
+        assertThat(called).isFalse()
+    }
+
+    @Test
+    fun `mapError transforms error for Failure`() {
+        val result: Outcome<Int, String> = Failure("error")
+        val mapped = result.mapError { it.length }
+        assertThat(mapped.errorOrNull()).isEqualTo(5)
+    }
+
+    @Test
+    fun `mapError preserves Success`() {
+        val result: Outcome<Int, String> = Success(42)
+        val mapped = result.mapError { it.length }
+        assertThat(mapped.getOrNull()).isEqualTo(42)
     }
 }
