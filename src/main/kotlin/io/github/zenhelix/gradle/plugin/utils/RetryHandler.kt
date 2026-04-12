@@ -56,7 +56,7 @@ public class RetryHandler(
                         throw e
                     }
                 }
-                else -> return result
+                else -> return result // required: HttpResponseResult also implements ResultLike
             }
 
             attempt++
