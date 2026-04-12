@@ -31,10 +31,11 @@ class PublishSplitBundleDropBehaviorTest {
 
     @BeforeEach
     fun setUp() {
-        mockClient = mockk(relaxed = true)
+        mockClient = mockk()
 
         coEvery { mockClient.uploadDeploymentBundle(any(), any(), any(), any()) } returns
                 HttpResponseResult.Success(deploymentId)
+        coEvery { mockClient.close() } returns Unit
     }
 
     private fun createBundleFiles(count: Int): File {
