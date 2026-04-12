@@ -8,7 +8,7 @@ import io.github.zenhelix.gradle.plugin.client.model.DeploymentError
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentStateType
 import io.github.zenhelix.gradle.plugin.client.model.Failure
 import io.github.zenhelix.gradle.plugin.client.model.PublishingType
-import io.github.zenhelix.gradle.plugin.client.model.ResultLike
+import io.github.zenhelix.gradle.plugin.client.model.Outcome
 import io.github.zenhelix.gradle.plugin.client.model.Success
 import io.github.zenhelix.gradle.plugin.client.model.ValidationError
 import io.github.zenhelix.gradle.plugin.client.model.toGradleException
@@ -49,7 +49,7 @@ public abstract class PublishBundleMavenCentralTask @Inject constructor(
     public abstract val deploymentName: Property<String>
 
     @get:Input
-    public abstract val credentials: Property<ResultLike<Credentials, ValidationError>>
+    public abstract val credentials: Property<Outcome<Credentials, ValidationError>>
 
     @get:Input
     public abstract val maxStatusChecks: Property<Int>
@@ -134,7 +134,7 @@ public abstract class PublishBundleMavenCentralTask @Inject constructor(
         deploymentId: UUID,
         publishingType: PublishingType?,
         maxChecks: Int, checkDelay: Duration
-    ): ResultLike<Unit, DeploymentError> {
+    ): Outcome<Unit, DeploymentError> {
         repeat(maxChecks) { checkIndex ->
             val checkNumber = checkIndex + 1
 

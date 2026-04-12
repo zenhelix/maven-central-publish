@@ -2,7 +2,7 @@ package io.github.zenhelix.gradle.plugin.utils
 
 import io.github.zenhelix.gradle.plugin.client.model.Credentials
 import io.github.zenhelix.gradle.plugin.client.model.Failure
-import io.github.zenhelix.gradle.plugin.client.model.ResultLike
+import io.github.zenhelix.gradle.plugin.client.model.Outcome
 import io.github.zenhelix.gradle.plugin.client.model.Success
 import io.github.zenhelix.gradle.plugin.client.model.ValidationError
 import io.github.zenhelix.gradle.plugin.extension.MavenCentralUploaderExtension
@@ -20,7 +20,7 @@ import org.gradle.kotlin.dsl.listProperty
 
 internal fun Project.mapCredentials(
     extension: MavenCentralUploaderExtension
-): Provider<ResultLike<Credentials, ValidationError>> = provider {
+): Provider<Outcome<Credentials, ValidationError>> = provider {
     val creds = extension.credentials
     when {
         creds.isBearerConfigured && creds.isUsernamePasswordConfigured -> {

@@ -13,7 +13,7 @@ public sealed class ResponseResult<out S : Any, out E : Any> {
 public sealed class HttpResponseResult<out S : Any, out E : Any>(
     public open val httpStatus: Int?,
     public open val httpHeaders: Map<String, List<String>>?
-) : ResponseResult<S, E>(), ResultLike<S, E?> {
+) : ResponseResult<S, E>(), Outcome<S, E?> {
 
     override fun <R> fold(onSuccess: (S) -> R, onFailure: (E?) -> R): R = when (this) {
         is Success         -> onSuccess(data)
@@ -48,17 +48,17 @@ public sealed class HttpResponseResult<out S : Any, out E : Any>(
     }
 
     @Suppress("UNCHECKED_CAST")
-    override fun <R> map(transform: (S) -> R): ResultLike<R, E?> = when (this) {
-        is Success         -> Success(transform(data) as Any, httpStatus, httpHeaders) as ResultLike<R, E?>
-        is Error           -> this as ResultLike<R, E?>
-        is UnexpectedError -> this as ResultLike<R, E?>
+    override fun <R> map(transform: (S) -> R): Outcome<R, E?> = when (this) {
+        is Success         -> Success(transform(data) as Any, httpStatus, httpHeaders) as Outcome<R, E?>
+        is Error           -> this as Outcome<R, E?>
+        is UnexpectedError -> this as Outcome<R, E?>
     }
 
     @Suppress("UNCHECKED_CAST")
-    override fun <R> flatMap(transform: (S) -> ResultLike<R, @UnsafeVariance E?>): ResultLike<R, E?> = when (this) {
+    override fun <R> flatMap(transform: (S) -> Outcome<R, @UnsafeVariance E?>): Outcome<R, E?> = when (this) {
         is Success         -> transform(data)
-        is Error           -> this as ResultLike<R, E?>
-        is UnexpectedError -> this as ResultLike<R, E?>
+        is Error           -> this as Outcome<R, E?>
+        is UnexpectedError -> this as Outcome<R, E?>
     }
 
     public companion object {

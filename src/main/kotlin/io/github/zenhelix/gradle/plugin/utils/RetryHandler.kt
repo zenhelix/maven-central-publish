@@ -1,7 +1,7 @@
 package io.github.zenhelix.gradle.plugin.utils
 
 import io.github.zenhelix.gradle.plugin.client.model.Failure
-import io.github.zenhelix.gradle.plugin.client.model.ResultLike
+import io.github.zenhelix.gradle.plugin.client.model.Outcome
 import io.github.zenhelix.gradle.plugin.client.model.Success
 import java.time.Duration
 import org.gradle.api.logging.Logger
@@ -19,10 +19,10 @@ public class RetryHandler(
     }
 
     public fun <T> executeWithRetry(
-        operation: (attempt: Int) -> ResultLike<T, Exception>,
+        operation: (attempt: Int) -> Outcome<T, Exception>,
         shouldRetry: (Exception) -> Boolean = { true },
         onRetry: ((attempt: Int, exception: Exception) -> Unit)? = null
-    ): ResultLike<T, Exception> {
+    ): Outcome<T, Exception> {
         var attempt = 1
         var lastError: Exception? = null
 
@@ -56,7 +56,7 @@ public class RetryHandler(
                         throw e
                     }
                 }
-                else -> return result // required: HttpResponseResult also implements ResultLike
+                else -> return result // required: HttpResponseResult also implements Outcome
             }
 
             attempt++

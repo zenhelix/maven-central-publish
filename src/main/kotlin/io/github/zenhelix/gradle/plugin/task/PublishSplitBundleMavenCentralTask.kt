@@ -9,7 +9,7 @@ import io.github.zenhelix.gradle.plugin.client.model.DeploymentError
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentStateType
 import io.github.zenhelix.gradle.plugin.client.model.Failure
 import io.github.zenhelix.gradle.plugin.client.model.PublishingType
-import io.github.zenhelix.gradle.plugin.client.model.ResultLike
+import io.github.zenhelix.gradle.plugin.client.model.Outcome
 import io.github.zenhelix.gradle.plugin.client.model.Success
 import io.github.zenhelix.gradle.plugin.client.model.ValidationError
 import io.github.zenhelix.gradle.plugin.client.model.isDroppable
@@ -48,7 +48,7 @@ public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
     public abstract val deploymentName: Property<String>
 
     @get:Input
-    public abstract val credentials: Property<ResultLike<Credentials, ValidationError>>
+    public abstract val credentials: Property<Outcome<Credentials, ValidationError>>
 
     @get:Input
     public abstract val maxStatusChecks: Property<Int>
@@ -140,7 +140,7 @@ public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
         bundleFiles: List<File>,
         effectiveType: PublishingType?,
         baseName: String?
-    ): ResultLike<List<UUID>, DeploymentError> {
+    ): Outcome<List<UUID>, DeploymentError> {
         val deploymentIds = mutableListOf<UUID>()
 
         val totalChunks = bundleFiles.size
@@ -201,7 +201,7 @@ public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
         maxChecks: Int,
         checkDelay: Duration,
         lastKnownStates: MutableMap<UUID, DeploymentStateType>
-    ): ResultLike<Unit, DeploymentError> {
+    ): Outcome<Unit, DeploymentError> {
         val terminalStates = mutableMapOf<UUID, DeploymentStateType>()
 
         repeat(maxChecks) { checkIndex ->
@@ -278,7 +278,7 @@ public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
         creds: Credentials,
         deploymentIds: List<UUID>,
         recoveryHandler: DeploymentRecoveryHandler
-    ): ResultLike<Unit, DeploymentError> {
+    ): Outcome<Unit, DeploymentError> {
         logger.lifecycle("Publishing all ${deploymentIds.size} deployment(s)...")
 
         val publishedIds = mutableSetOf<UUID>()
