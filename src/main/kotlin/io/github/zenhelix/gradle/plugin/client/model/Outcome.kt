@@ -27,7 +27,10 @@ public fun <T, E> Outcome<T, E>.onFailure(action: (E) -> Unit): Outcome<T, E> {
 public fun <T, E, R> Outcome<T, E>.mapError(transform: (E) -> R): Outcome<T, R> = when (this) {
     is Success -> this
     is Failure -> Failure(transform(error))
-    else -> this as Outcome<T, R>
+    else -> {
+        val error = errorOrNull()
+        if (error != null) Failure(transform(error)) else this as Outcome<T, R>
+    }
 }
 
 public data class Success<out T>(val value: T) : Outcome<T, Nothing> {

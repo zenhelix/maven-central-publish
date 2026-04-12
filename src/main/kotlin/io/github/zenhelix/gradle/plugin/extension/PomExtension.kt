@@ -1,5 +1,6 @@
 package io.github.zenhelix.gradle.plugin.extension
 
+import io.github.zenhelix.gradle.plugin.utils.orBlankAsNull
 import java.io.Serializable
 import org.gradle.api.Action
 import org.gradle.api.model.ObjectFactory
@@ -88,7 +89,8 @@ public open class PomLicenseBuilder @Inject constructor(objects: ObjectFactory) 
     }
 
     internal fun build(): PomLicenseData {
-        val licenseName = requireNotNull(name.orNull) { "License 'name' is required. Use a preset (e.g., apache2()) or set name.set(\"...\")." }
+        val licenseName = name.orBlankAsNull()
+            ?: error("License 'name' is required. Use a preset (e.g., apache2()) or set name.set(\"...\").")
         return PomLicenseData(
             name = licenseName,
             url = url.orNull,
@@ -108,12 +110,12 @@ public open class PomDeveloperBuilder @Inject constructor(objects: ObjectFactory
     public val url: Property<String> = objects.property<String>()
 
     internal fun build(): PomDeveloperData {
-        require(id.orNull != null || name.orNull != null) {
+        require(id.orBlankAsNull() != null || name.orBlankAsNull() != null) {
             "Developer must have at least 'id' or 'name'. Set developer { id.set(\"...\") } or developer { name.set(\"...\") }."
         }
         return PomDeveloperData(
-            id = id.orNull,
-            name = name.orNull,
+            id = id.orBlankAsNull(),
+            name = name.orBlankAsNull(),
             email = email.orNull,
             url = url.orNull
         )

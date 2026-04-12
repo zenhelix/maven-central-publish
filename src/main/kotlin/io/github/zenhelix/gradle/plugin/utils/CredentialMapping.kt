@@ -10,7 +10,7 @@ import org.gradle.api.Project
 import org.gradle.api.provider.Property
 import org.gradle.api.provider.Provider
 
-private fun Property<String>.orBlankAsNull(): String? = orNull?.takeIf { it.isNotBlank() }
+internal fun Property<String>.orBlankAsNull(): String? = orNull?.takeIf { it.isNotBlank() }
 
 internal fun Project.mapCredentials(
     extension: MavenCentralUploaderExtension

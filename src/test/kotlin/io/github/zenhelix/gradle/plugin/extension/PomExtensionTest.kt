@@ -16,7 +16,7 @@ class PomExtensionTest {
 
         assertThatThrownBy {
             extension.license { /* empty */ }
-        }.isInstanceOf(IllegalArgumentException::class.java)
+        }.isInstanceOf(IllegalStateException::class.java)
          .hasMessageContaining("name")
     }
 
@@ -28,6 +28,53 @@ class PomExtensionTest {
             extension.developer { /* empty */ }
         }.isInstanceOf(IllegalArgumentException::class.java)
          .hasMessageContaining("id")
+    }
+
+    @Test
+    fun `license builder should throw when name is blank`() {
+        val extension = project.objects.newInstance<PomExtension>()
+
+        assertThatThrownBy {
+            extension.license { name.set("") }
+        }.isInstanceOf(IllegalStateException::class.java)
+            .hasMessageContaining("name")
+    }
+
+    @Test
+    fun `license builder should throw when name is whitespace only`() {
+        val extension = project.objects.newInstance<PomExtension>()
+
+        assertThatThrownBy {
+            extension.license { name.set("   ") }
+        }.isInstanceOf(IllegalStateException::class.java)
+            .hasMessageContaining("name")
+    }
+
+    @Test
+    fun `developer builder should throw when id and name are blank`() {
+        val extension = project.objects.newInstance<PomExtension>()
+
+        assertThatThrownBy {
+            extension.developer {
+                id.set("")
+                name.set("  ")
+            }
+        }.isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessageContaining("id")
+    }
+
+    @Test
+    fun `developer builder should accept blank id if name is non-blank`() {
+        val extension = project.objects.newInstance<PomExtension>()
+
+        extension.developer {
+            id.set("")
+            name.set("Dev One")
+        }
+
+        assertThat(extension.developers).hasSize(1)
+        assertThat(extension.developers[0].id).isNull()
+        assertThat(extension.developers[0].name).isEqualTo("Dev One")
     }
 
     @Test
