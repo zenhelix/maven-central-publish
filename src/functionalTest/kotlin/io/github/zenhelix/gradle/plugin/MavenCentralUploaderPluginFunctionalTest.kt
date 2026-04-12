@@ -66,14 +66,18 @@ class MavenCentralUploaderPluginFunctionalTest {
                 apply {
                     plugin("$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
                 }
-                
+
+                mavenCentralPortal {
+                    autoConfigureJars = false
+                }
+
                 publishing {
                     repositories {
                         mavenLocal()
                         ${mavenCentralPortal()}
                     }
                 }
-            
+
                 ${signing()}
                 $pom
             }
@@ -316,7 +320,7 @@ class MavenCentralUploaderPluginFunctionalTest {
         assertThat(
             ZipFile(testProjectDir.moduleBundleFile(null, moduleName, version, "allPublications").toFile())
         ).containsMavenArtifacts("test.zenhelix", moduleName, version) {
-            standardJavaLibrary()
+            standardJavaLibrary(withSources = true, withJavadoc = true)
         }
     }
 
@@ -380,8 +384,8 @@ class MavenCentralUploaderPluginFunctionalTest {
         assertThat(
             ZipFile(testProjectDir.moduleSplitBundleFile("test-library", version, "allModules").toFile())
         ).containsMavenArtifacts("test.zenhelix", "test-library", version) {
-            standardJavaLibrary(module1)
-            standardJavaLibrary(module2)
+            standardJavaLibrary(module1, withSources = true, withJavadoc = true)
+            standardJavaLibrary(module2, withSources = true, withJavadoc = true)
         }
     }
 
@@ -439,7 +443,7 @@ class MavenCentralUploaderPluginFunctionalTest {
         assertThat(
             ZipFile(testProjectDir.moduleBundleFile(module1, module1, version, "allPublications").toFile())
         ).containsMavenArtifacts("test.zenhelix", module1, version) {
-            standardJavaLibrary()
+            standardJavaLibrary(withSources = true, withJavadoc = true)
         }
     }
 
@@ -756,7 +760,7 @@ class MavenCentralUploaderPluginFunctionalTest {
         assertThat(
             ZipFile(testProjectDir.moduleBundleFile(appModuleName, appModuleName, version, publicationName).toFile())
         ).containsMavenArtifacts("test.zenhelix", appModuleName, version) {
-            standardJavaLibrary(withSources = true)
+            standardJavaLibrary(withSources = true, withJavadoc = true)
         }
     }
 
@@ -851,7 +855,7 @@ class MavenCentralUploaderPluginFunctionalTest {
         assertThat(
             ZipFile(testProjectDir.moduleBundleFile(appModuleName, appModuleName, version, "allPublications").toFile())
         ).containsMavenArtifacts("test.zenhelix", appModuleName, version) {
-            standardJavaLibrary(withSources = true)
+            standardJavaLibrary(withSources = true, withJavadoc = true)
         }
     }
 
@@ -1093,6 +1097,8 @@ class MavenCentralUploaderPluginFunctionalTest {
             .containsExactlyRootTasksInOrder(
                 "generateMetadataFileForBomPublicationPublication",
                 "generatePomFileForBomPublicationPublication",
+                "javadocJar",
+                "sourcesJar",
                 "signBomPublicationPublication",
                 "checksumBomPublicationPublication",
                 "zipDeploymentAllModules",
@@ -1225,7 +1231,7 @@ class MavenCentralUploaderPluginFunctionalTest {
         assertThat(
             ZipFile(testProjectDir.moduleBundleFile(null, moduleName, version, "allPublications").toFile())
         ).containsMavenArtifacts("test.zenhelix", moduleName, version) {
-            standardJavaLibrary()
+            standardJavaLibrary(withSources = true, withJavadoc = true)
         }
     }
 

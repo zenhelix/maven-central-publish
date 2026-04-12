@@ -57,6 +57,14 @@ public open class MavenCentralUploaderExtension @Inject constructor(objects: Obj
         configure.execute(pom)
     }
 
+    /**
+     * When `true` (default), automatically registers `javadocJar` and `sourcesJar` tasks
+     * and attaches them to all Maven publications. Existing tasks with the same name are not overwritten.
+     *
+     * If the Dokka plugin is applied, its output is used for the javadoc jar content.
+     */
+    public val autoConfigureJars: Property<Boolean> = objects.property<Boolean>().convention(true)
+
     public companion object {
         public const val MAVEN_CENTRAL_UPLOADER_EXTENSION_NAME: String = "mavenCentralPortal"
 
