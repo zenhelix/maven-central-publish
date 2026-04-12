@@ -1,25 +1,26 @@
 package io.github.zenhelix.gradle.plugin.task
 
+import io.github.zenhelix.gradle.plugin.client.DeploymentRecoveryHandler
 import io.github.zenhelix.gradle.plugin.client.MavenCentralApiClient
 import io.github.zenhelix.gradle.plugin.client.createApiClient as createDefaultApiClient
-import io.github.zenhelix.gradle.plugin.client.tryDropDeployment
 import io.github.zenhelix.gradle.plugin.client.model.Credentials
+import io.github.zenhelix.gradle.plugin.client.model.DeploymentError
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentStateType
-import io.github.zenhelix.gradle.plugin.client.model.HttpResponseResult
+import io.github.zenhelix.gradle.plugin.client.model.Failure
 import io.github.zenhelix.gradle.plugin.client.model.PublishingType
 import io.github.zenhelix.gradle.plugin.client.model.ResultLike
+import io.github.zenhelix.gradle.plugin.client.model.Success
 import io.github.zenhelix.gradle.plugin.client.model.ValidationError
+import io.github.zenhelix.gradle.plugin.client.model.toGradleException
 import java.time.Duration
 import java.util.UUID
 import org.gradle.api.DefaultTask
-import org.gradle.api.GradleException
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.model.ObjectFactory
 import org.gradle.api.provider.Property
 import org.gradle.api.publish.plugins.PublishingPlugin.PUBLISH_TASK_GROUP
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputFile
-import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.Optional
 import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
@@ -27,73 +28,35 @@ import org.gradle.api.tasks.TaskAction
 import org.gradle.work.DisableCachingByDefault
 import javax.inject.Inject
 
-/**
- * Task for publishing deployment bundles to Maven Central Portal.
- *
- * This task uploads a ZIP bundle containing artifacts, signatures, and checksums
- * to Maven Central Portal and waits for the deployment to complete.
- */
 @DisableCachingByDefault(because = "Not worth caching - publishes to external service")
 public abstract class PublishBundleMavenCentralTask @Inject constructor(
     private val objects: ObjectFactory
 ) : DefaultTask() {
 
-    /**
-     * Base URL for Maven Central Portal API.
-     * Default: https://central.sonatype.com
-     */
     @get:Input
     public abstract val baseUrl: Property<String>
 
-    /**
-     * ZIP file containing the deployment bundle.
-     * Must contain artifacts, POM files, signatures, and checksums.
-     */
     @get:InputFile
     @get:PathSensitive(PathSensitivity.NONE)
     public abstract val zipFile: RegularFileProperty
 
-    /**
-     * Publishing type - AUTOMATIC or USER_MANAGED.
-     * AUTOMATIC: Deployment will be automatically released after validation
-     * USER_MANAGED: User must manually release through Central Portal UI
-     */
     @get:Input
     @get:Optional
     public abstract val publishingType: Property<PublishingType>
 
-    /**
-     * Optional deployment name for identification in Central Portal.
-     * If not provided, a default name will be generated.
-     */
     @get:Input
     @get:Optional
     public abstract val deploymentName: Property<String>
 
-    /**
-     * Credentials for accessing Maven Central Portal API.
-     */
     @get:Input
     public abstract val credentials: Property<ResultLike<Credentials, ValidationError>>
 
-    /**
-     * Maximum number of status checks for deployment completion.
-     * Default: 20
-     */
     @get:Input
     public abstract val maxStatusChecks: Property<Int>
 
-    /**
-     * Delay between status checks.
-     * Default: 10 seconds
-     */
     @get:Input
     public abstract val statusCheckDelay: Property<Duration>
 
-    /**
-     * Creates the API client. Called at execution time (not configuration time)
-     * to avoid configuration cache serialization issues with HttpClient.
-     */
     protected open fun createApiClient(url: String): MavenCentralApiClient = createDefaultApiClient(url)
 
     init {
@@ -107,14 +70,19 @@ public abstract class PublishBundleMavenCentralTask @Inject constructor(
 
     @TaskAction
     public fun publishBundle() {
-        validateInputs()
+        validateInputs()?.let { throw it.toGradleException() }
 
-        val bundleFile = zipFile.asFile.get()
         val creds = credentials.get().fold(
             onSuccess = { it },
-            onFailure = { throw GradleException(it.message) }
+            onFailure = { throw it.toGradleException() }
         )
-        val client = createApiClient(baseUrl.get())
+
+        val error = executePublishing(creds)
+        error?.let { throw it.toGradleException() }
+    }
+
+    private fun executePublishing(creds: Credentials): DeploymentError? {
+        val bundleFile = zipFile.asFile.get()
         val type = publishingType.orNull
         val name = deploymentName.orNull
         val maxChecks = maxStatusChecks.get()
@@ -122,204 +90,121 @@ public abstract class PublishBundleMavenCentralTask @Inject constructor(
 
         logger.lifecycle("Publishing deployment bundle: ${bundleFile.name}. Publishing type: ${type ?: PublishingType.AUTOMATIC}. Deployment name: $name")
 
-        try {
-            client.use { apiClient ->
-                val uploadResult = apiClient.uploadDeploymentBundle(
-                    credentials = creds, bundle = bundleFile.toPath(), publishingType = type, deploymentName = name
-                )
+        return createApiClient(baseUrl.get()).use { apiClient ->
+            val recoveryHandler = DeploymentRecoveryHandler(apiClient, creds, logger)
 
-                when (uploadResult) {
-                    is HttpResponseResult.Success -> {
-                        val deploymentId = uploadResult.data
-                        try {
-                            waitForDeploymentCompletion(apiClient, creds, deploymentId, type, maxChecks, checkDelay)
-                        } catch (e: DeploymentFailedException) {
-                            if (e.lastState.isDroppable) {
-                                tryDropDeployment(apiClient, creds, deploymentId)
-                            } else {
-                                logger.warn(
-                                    "Deployment {} is in {} state and cannot be dropped. Check Maven Central Portal for current status.",
-                                    deploymentId, e.lastState
-                                )
-                            }
-                            throw e
-                        } catch (e: GradleException) {
-                            // Status check HTTP error or parse failure — deployment state unknown,
-                            // attempt drop as best-effort (tryDropDeployment never throws)
-                            tryDropDeployment(apiClient, creds, deploymentId)
-                            throw e
-                        }
-                    }
-
-                    is HttpResponseResult.Error -> {
-                        throw GradleException("Failed to upload bundle: HTTP ${uploadResult.httpStatus}, Response: ${uploadResult.data}")
-                    }
-
-                    is HttpResponseResult.UnexpectedError -> {
-                        throw GradleException("Unexpected error during bundle upload", uploadResult.cause)
-                    }
+            apiClient.uploadDeploymentBundle(
+                credentials = creds, bundle = bundleFile.toPath(), publishingType = type, deploymentName = name
+            ).foldHttp(
+                onSuccess = { deploymentId, _, _ ->
+                    val waitResult = waitForDeploymentCompletion(apiClient, creds, deploymentId, type, maxChecks, checkDelay)
+                    waitResult.fold(
+                        onSuccess = { null },
+                        onFailure = { error -> recoveryHandler.recover(deploymentId, error) }
+                    )
+                },
+                onError = { data, _, httpStatus, _ ->
+                    DeploymentError.UploadFailed(httpStatus, data)
+                },
+                onUnexpected = { cause, _, _ ->
+                    DeploymentError.UploadUnexpected(cause)
                 }
-            }
-        } catch (e: GradleException) {
-            throw e
-        } catch (e: Exception) {
-            throw GradleException("Failed to publish deployment bundle: ${e.message}", e)
+            )
         }
     }
 
-    private fun validateInputs() {
-        if (!zipFile.isPresent) {
-            throw GradleException("Property 'zipFile' is required but not set")
-        }
-
-        if (!credentials.isPresent) {
-            throw GradleException("Property 'credentials' is required but not set")
-        }
+    private fun validateInputs(): ValidationError? {
+        if (!zipFile.isPresent) return ValidationError.MissingProperty("zipFile")
+        if (!credentials.isPresent) return ValidationError.MissingProperty("credentials")
 
         val file = zipFile.asFile.get()
-        if (!file.exists()) {
-            throw GradleException("Bundle file does not exist: ${file.absolutePath}")
-        }
-
-        if (!file.isFile) {
-            throw GradleException("Bundle path is not a file: ${file.absolutePath}")
-        }
-
-        if (file.length() == 0L) {
-            throw GradleException("Bundle file is empty: ${file.absolutePath}")
-        }
+        if (!file.exists()) return ValidationError.InvalidFile(file.absolutePath, "Bundle file does not exist")
+        if (!file.isFile) return ValidationError.InvalidFile(file.absolutePath, "Bundle path is not a file")
+        if (file.length() == 0L) return ValidationError.InvalidFile(file.absolutePath, "Bundle file is empty")
 
         val maxChecks = maxStatusChecks.get()
-        if (maxChecks < 1) {
-            throw GradleException("maxStatusChecks must be at least 1, got: $maxChecks")
-        }
+        if (maxChecks < 1) return ValidationError.InvalidValue("maxStatusChecks", "must be at least 1, got: $maxChecks")
+
+        return null
     }
 
-    /**
-     * Polls the deployment status endpoint until the deployment reaches a terminal state.
-     *
-     * State machine transitions:
-     * - PENDING → VALIDATING → VALIDATED → PUBLISHING → PUBLISHED (success for AUTOMATIC)
-     * - PENDING → VALIDATING → VALIDATED (success for USER_MANAGED — user releases manually)
-     * - Any state → FAILED (error — deployment is dropped by caller)
-     * - UNKNOWN is treated as FAILED
-     *
-     * If the deployment does not reach a terminal state within [maxChecks] polls,
-     * a [DeploymentFailedException] is thrown. The caller checks [DeploymentStateType.isDroppable]
-     * to decide whether to attempt dropping — deployments in PUBLISHING state cannot be dropped.
-     */
     private fun waitForDeploymentCompletion(
         client: MavenCentralApiClient,
         creds: Credentials,
         deploymentId: UUID,
         publishingType: PublishingType?,
         maxChecks: Int, checkDelay: Duration
-    ) {
+    ): ResultLike<Unit, DeploymentError> {
         repeat(maxChecks) { checkIndex ->
             val checkNumber = checkIndex + 1
 
-            when (val statusResult = client.deploymentStatus(creds, deploymentId)) {
-                is HttpResponseResult.Success -> {
-                    val status = statusResult.data
+            val stepResult: DeploymentPollStep = client.deploymentStatus(creds, deploymentId).foldHttp(
+                onSuccess = { status, _, _ ->
                     logger.debug("Deployment status check ({}/{}): {}", checkNumber, maxChecks, status.deploymentState)
 
-                    val state = when (status.deploymentState) {
-                        DeploymentStateType.PENDING -> DeploymentState.IN_PROGRESS
-                        DeploymentStateType.VALIDATING -> DeploymentState.IN_PROGRESS
-                        DeploymentStateType.VALIDATED -> {
-                            if (publishingType == PublishingType.USER_MANAGED) {
-                                DeploymentState.SUCCESS
-                            } else {
-                                DeploymentState.IN_PROGRESS
-                            }
-                        }
-
-                        DeploymentStateType.PUBLISHING -> DeploymentState.IN_PROGRESS
-                        DeploymentStateType.PUBLISHED -> DeploymentState.SUCCESS
-                        DeploymentStateType.FAILED -> DeploymentState.FAILED
-                        DeploymentStateType.UNKNOWN -> DeploymentState.FAILED
-                    }
-
-                    when (state) {
+                    when (evaluateState(status.deploymentState, publishingType)) {
                         DeploymentState.SUCCESS -> {
                             if (publishingType == PublishingType.USER_MANAGED) {
                                 logger.lifecycle("Note: USER_MANAGED publishing type - you may need to manually release the deployment in Central Portal")
                             }
-                            return
+                            DeploymentPollStep.Done
                         }
-
-                        DeploymentState.FAILED -> throw DeploymentFailedException(
-                            status.deploymentState,
-                            buildString {
-                                append("Deployment failed with status: ${status.deploymentState}")
-                                if (!status.errors.isNullOrEmpty()) {
-                                    append("\nErrors: ${status.errors}")
-                                }
-                            }
+                        DeploymentState.FAILED -> DeploymentPollStep.Terminal(
+                            DeploymentError.DeploymentFailed(status.deploymentState, status.errors)
                         )
-
                         DeploymentState.IN_PROGRESS -> {
-                            if (checkNumber < maxChecks) {
-                                try {
-                                    Thread.sleep(checkDelay.toMillis())
-                                } catch (e: InterruptedException) {
-                                    Thread.currentThread().interrupt()
-                                    throw e
-                                }
+                            if (checkNumber >= maxChecks) {
+                                DeploymentPollStep.Terminal(DeploymentError.Timeout(status.deploymentState, maxChecks))
                             } else {
-                                throw DeploymentFailedException(
-                                    status.deploymentState,
-                                    "Deployment did not complete after $maxChecks status checks. Current status: ${status.deploymentState}. Check Maven Central Portal for current status."
-                                )
+                                DeploymentPollStep.Continue
                             }
                         }
                     }
+                },
+                onError = { data, _, httpStatus, _ ->
+                    DeploymentPollStep.Terminal(DeploymentError.StatusCheckFailed(httpStatus, data))
+                },
+                onUnexpected = { cause, _, _ ->
+                    DeploymentPollStep.Terminal(DeploymentError.StatusCheckUnexpected(cause))
                 }
+            )
 
-                is HttpResponseResult.Error -> throw GradleException("Failed to check deployment status: HTTP ${statusResult.httpStatus}, Response: ${statusResult.data}")
-                is HttpResponseResult.UnexpectedError -> throw GradleException(
-                    "Unexpected error while checking deployment status",
-                    statusResult.cause
-                )
+            when (stepResult) {
+                is DeploymentPollStep.Done -> return Success(Unit)
+                is DeploymentPollStep.Terminal -> return Failure(stepResult.error)
+                is DeploymentPollStep.Continue -> {
+                    try {
+                        Thread.sleep(checkDelay.toMillis())
+                    } catch (e: InterruptedException) {
+                        Thread.currentThread().interrupt()
+                        throw e
+                    }
+                }
             }
         }
+
+        return Failure(DeploymentError.Timeout(DeploymentStateType.UNKNOWN, maxChecks))
     }
 
-    private fun tryDropDeployment(
-        client: MavenCentralApiClient,
-        creds: Credentials,
-        deploymentId: UUID
-    ) {
-        logger.warn("Deployment failed, attempting to drop deployment {}", deploymentId)
-        client.tryDropDeployment(creds, deploymentId, logger)
-    }
+    private fun evaluateState(state: DeploymentStateType, publishingType: PublishingType?): DeploymentState =
+        when (state) {
+            DeploymentStateType.PENDING, DeploymentStateType.VALIDATING -> DeploymentState.IN_PROGRESS
+            DeploymentStateType.VALIDATED -> {
+                if (publishingType == PublishingType.USER_MANAGED) DeploymentState.SUCCESS
+                else DeploymentState.IN_PROGRESS
+            }
+            DeploymentStateType.PUBLISHING -> DeploymentState.IN_PROGRESS
+            DeploymentStateType.PUBLISHED -> DeploymentState.SUCCESS
+            DeploymentStateType.FAILED, DeploymentStateType.UNKNOWN -> DeploymentState.FAILED
+        }
 
     private enum class DeploymentState {
         SUCCESS, IN_PROGRESS, FAILED
     }
 
-}
-
-/**
- * Exception thrown when a deployment fails or times out.
- * Carries the [lastState] so the caller can decide whether to attempt dropping the deployment.
- */
-internal class DeploymentFailedException(
-    val lastState: DeploymentStateType,
-    message: String
-) : GradleException(message)
-
-/**
- * Whether a deployment in this state can be dropped via the Maven Central Portal API.
- * Deployments in PUBLISHING or PUBLISHED state cannot be dropped.
- */
-internal val DeploymentStateType.isDroppable: Boolean
-    get() = when (this) {
-        DeploymentStateType.PENDING,
-        DeploymentStateType.VALIDATING,
-        DeploymentStateType.VALIDATED,
-        DeploymentStateType.FAILED,
-        DeploymentStateType.UNKNOWN -> true
-        DeploymentStateType.PUBLISHING,
-        DeploymentStateType.PUBLISHED -> false
+    private sealed class DeploymentPollStep {
+        data object Done : DeploymentPollStep()
+        data object Continue : DeploymentPollStep()
+        data class Terminal(val error: DeploymentError) : DeploymentPollStep()
     }
+}

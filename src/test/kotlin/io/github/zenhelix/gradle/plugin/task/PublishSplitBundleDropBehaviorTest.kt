@@ -129,7 +129,7 @@ class PublishSplitBundleDropBehaviorTest {
         every { mockClient.dropDeployment(any(), any()) } returns HttpResponseResult.Success(Unit)
 
         assertThatThrownBy { executePublishSplitTask(bundlesDir) }
-            .isInstanceOf(DeploymentsAlreadyCleanedUpException::class.java)
+            .isInstanceOf(GradleException::class.java)
 
         // handlePublishFailure should NOT drop id1 (already published) or id2 (the failed one)
         // It should only drop remaining unpublished deployments (none in this case —

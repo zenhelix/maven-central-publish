@@ -82,7 +82,7 @@ class PublishBundleDropBehaviorTest {
         every { mockClient.dropDeployment(any(), any()) } returns HttpResponseResult.Success(Unit)
 
         assertThatThrownBy { executePublishTask() }
-            .isInstanceOf(DeploymentFailedException::class.java)
+            .isInstanceOf(GradleException::class.java)
             .hasMessageContaining("did not complete after 2 status checks")
 
         verify(exactly = 1) { mockClient.dropDeployment(any(), eq(deploymentId)) }
@@ -94,7 +94,7 @@ class PublishBundleDropBehaviorTest {
         every { mockClient.dropDeployment(any(), any()) } returns HttpResponseResult.Success(Unit)
 
         assertThatThrownBy { executePublishTask() }
-            .isInstanceOf(DeploymentFailedException::class.java)
+            .isInstanceOf(GradleException::class.java)
 
         verify(exactly = 1) { mockClient.dropDeployment(any(), eq(deploymentId)) }
     }
@@ -104,7 +104,7 @@ class PublishBundleDropBehaviorTest {
         every { mockClient.deploymentStatus(any(), any()) } returns statusReturning(DeploymentStateType.PUBLISHING)
 
         assertThatThrownBy { executePublishTask() }
-            .isInstanceOf(DeploymentFailedException::class.java)
+            .isInstanceOf(GradleException::class.java)
             .hasMessageContaining("PUBLISHING")
 
         verify(exactly = 0) { mockClient.dropDeployment(any(), any()) }
@@ -124,7 +124,7 @@ class PublishBundleDropBehaviorTest {
         every { mockClient.dropDeployment(any(), any()) } returns HttpResponseResult.Success(Unit)
 
         assertThatThrownBy { executePublishTask() }
-            .isInstanceOf(DeploymentFailedException::class.java)
+            .isInstanceOf(GradleException::class.java)
             .hasMessageContaining("FAILED")
 
         verify(exactly = 1) { mockClient.dropDeployment(any(), eq(deploymentId)) }
@@ -151,7 +151,7 @@ class PublishBundleDropBehaviorTest {
 
         // Should still throw the timeout exception, but NOT crash on the drop failure
         assertThatThrownBy { executePublishTask() }
-            .isInstanceOf(DeploymentFailedException::class.java)
+            .isInstanceOf(GradleException::class.java)
             .hasMessageContaining("did not complete after 2 status checks")
 
         // Drop was attempted (state was droppable at check time) but failed gracefully
