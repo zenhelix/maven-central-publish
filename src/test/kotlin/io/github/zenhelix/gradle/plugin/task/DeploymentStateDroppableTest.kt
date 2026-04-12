@@ -1,6 +1,7 @@
 package io.github.zenhelix.gradle.plugin.task
 
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentStateType
+import io.github.zenhelix.gradle.plugin.client.model.isDroppable
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest

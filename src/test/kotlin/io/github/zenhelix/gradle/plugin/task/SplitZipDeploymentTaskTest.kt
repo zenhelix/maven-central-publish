@@ -1,7 +1,7 @@
 package io.github.zenhelix.gradle.plugin.task
 
-import io.github.zenhelix.gradle.plugin.utils.BundleSizeExceededException
-import io.github.zenhelix.gradle.plugin.utils.megabytes
+import org.gradle.api.GradleException
+import io.github.zenhelix.gradle.plugin.extension.megabytes
 import java.io.File
 import java.util.zip.ZipFile
 import org.assertj.core.api.Assertions.assertThat
@@ -143,7 +143,7 @@ class SplitZipDeploymentTaskTest {
         }.get()
 
         assertThatThrownBy { task.createSplitZips() }
-            .isInstanceOf(BundleSizeExceededException::class.java)
+            .isInstanceOf(io.github.zenhelix.gradle.plugin.client.model.MavenCentralChunkException::class.java)
             .hasMessageContaining(":big")
     }
 }

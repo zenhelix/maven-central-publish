@@ -1,10 +1,11 @@
 package io.github.zenhelix.gradle.plugin.task
 
-import io.github.zenhelix.gradle.plugin.utils.BundleChunker
-import io.github.zenhelix.gradle.plugin.utils.Chunk
-import io.github.zenhelix.gradle.plugin.utils.ModuleSize
-import io.github.zenhelix.gradle.plugin.utils.toDisplayKB
-import io.github.zenhelix.gradle.plugin.utils.toDisplayMB
+import io.github.zenhelix.gradle.plugin.client.model.toGradleException
+import io.github.zenhelix.gradle.plugin.client.BundleChunker
+import io.github.zenhelix.gradle.plugin.client.Chunk
+import io.github.zenhelix.gradle.plugin.client.ModuleSize
+import io.github.zenhelix.gradle.plugin.extension.toDisplayKB
+import io.github.zenhelix.gradle.plugin.extension.toDisplayMB
 import java.io.File
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -58,7 +59,10 @@ public abstract class SplitZipDeploymentTask : DefaultTask() {
             ModuleSize(projectPath, totalSize)
         }
 
-        val chunks = BundleChunker.chunk(moduleSizes, maxSize)
+        val chunks = BundleChunker.chunk(moduleSizes, maxSize).fold(
+            onSuccess = { it },
+            onFailure = { throw it.toGradleException() }
+        )
 
         if (chunks.isEmpty()) {
             logger.lifecycle("No publications to bundle")

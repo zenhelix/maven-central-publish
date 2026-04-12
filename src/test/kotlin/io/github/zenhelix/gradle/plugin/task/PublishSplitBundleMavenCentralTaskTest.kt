@@ -38,7 +38,7 @@ class PublishSplitBundleMavenCentralTaskTest {
 
         val task = project.tasks.register<PublishSplitBundleMavenCentralTask>("publishSplit") {
             baseUrl.set("http://test")
-            credentials.set(BearerTokenCredentials("test-token"))
+            credentials.set(io.github.zenhelix.gradle.plugin.client.model.Success(BearerTokenCredentials("test-token")))
             publishingType.set(PublishingType.AUTOMATIC)
             maxStatusChecks.set(5)
             statusCheckDelay.set(Duration.ofMillis(1))
@@ -56,7 +56,7 @@ class PublishSplitBundleMavenCentralTaskTest {
 
         val task = project.tasks.register<PublishSplitBundleMavenCentralTask>("publishSplit") {
             baseUrl.set("http://test")
-            credentials.set(BearerTokenCredentials("test-token"))
+            credentials.set(io.github.zenhelix.gradle.plugin.client.model.Success(BearerTokenCredentials("test-token")))
             bundlesDirectory.set(File(projectDir, "bundles"))
         }.get()
 
@@ -72,7 +72,7 @@ class PublishSplitBundleMavenCentralTaskTest {
 
         val task = project.tasks.register<PublishSplitBundleMavenCentralTask>("publishSplit") {
             baseUrl.set("http://test")
-            credentials.set(BearerTokenCredentials("test-token"))
+            credentials.set(io.github.zenhelix.gradle.plugin.client.model.Success(BearerTokenCredentials("test-token")))
             publishingType.set(PublishingType.AUTOMATIC)
             maxStatusChecks.set(5)
             statusCheckDelay.set(Duration.ofMillis(1))

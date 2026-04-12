@@ -1,17 +1,27 @@
 package io.github.zenhelix.gradle.plugin.task
 
+import io.github.zenhelix.gradle.plugin.client.recovery.DeploymentRecoveryHandler
 import io.github.zenhelix.gradle.plugin.client.MavenCentralApiClient
 import io.github.zenhelix.gradle.plugin.client.createApiClient as createDefaultApiClient
-import io.github.zenhelix.gradle.plugin.client.tryDropDeployment
+import io.github.zenhelix.gradle.plugin.client.recovery.tryDropDeployment
 import io.github.zenhelix.gradle.plugin.client.model.Credentials
+import io.github.zenhelix.gradle.plugin.client.model.DeploymentError
+import io.github.zenhelix.gradle.plugin.client.model.HttpStatus
+import io.github.zenhelix.gradle.plugin.client.model.DeploymentId
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentStateType
-import io.github.zenhelix.gradle.plugin.client.model.HttpResponseResult
+import io.github.zenhelix.gradle.plugin.client.model.Failure
 import io.github.zenhelix.gradle.plugin.client.model.PublishingType
+import io.github.zenhelix.gradle.plugin.client.model.Outcome
+import io.github.zenhelix.gradle.plugin.client.model.Success
+import io.github.zenhelix.gradle.plugin.client.model.ValidationError
+import io.github.zenhelix.gradle.plugin.client.model.isDroppable
+import io.github.zenhelix.gradle.plugin.client.model.getOrThrow
+import io.github.zenhelix.gradle.plugin.client.model.toGradleException
 import java.io.File
 import java.time.Duration
-import java.util.UUID
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
 import org.gradle.api.DefaultTask
-import org.gradle.api.GradleException
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.publish.plugins.PublishingPlugin.PUBLISH_TASK_GROUP
@@ -42,7 +52,7 @@ public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
     public abstract val deploymentName: Property<String>
 
     @get:Input
-    public abstract val credentials: Property<Credentials>
+    public abstract val credentials: Property<Outcome<Credentials, ValidationError>>
 
     @get:Input
     public abstract val maxStatusChecks: Property<Int>
@@ -62,9 +72,19 @@ public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
     }
 
     @TaskAction
-    public fun publishBundles() {
-        validateInputs()
+    public fun publishBundles(): Unit = runBlocking {
+        doPublishBundles()
+    }
 
+    private suspend fun doPublishBundles() {
+        validateInputs().getOrThrow { it.toGradleException() }
+        val creds = credentials.get().getOrThrow { it.toGradleException() }
+
+        val error = executePublishing(creds)
+        error?.let { throw it.toGradleException() }
+    }
+
+    private suspend fun executePublishing(creds: Credentials): DeploymentError? {
         val bundlesDir = bundlesDirectory.asFile.get()
         val bundleFiles = bundlesDir
             .listFiles { f -> f.extension == "zip" }
@@ -72,10 +92,9 @@ public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
             .orEmpty()
 
         if (bundleFiles.isEmpty()) {
-            throw GradleException("No ZIP bundles found in ${bundlesDir.absolutePath}")
+            return DeploymentError.UploadFailed(HttpStatus(0), "No ZIP bundles found in ${bundlesDir.absolutePath}")
         }
 
-        val creds = credentials.get()
         val maxChecks = maxStatusChecks.get()
         val checkDelay = statusCheckDelay.get()
         val baseName = deploymentName.orNull
@@ -92,56 +111,46 @@ public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
             requestedType
         }
 
-        try {
-            createApiClient(baseUrl.get()).use { client ->
-                val deploymentIds = uploadAllBundles(client, creds, bundleFiles, effectiveType, baseName)
+        val client = createApiClient(baseUrl.get())
+        return try {
+            val recoveryHandler = DeploymentRecoveryHandler(client, creds, logger)
+            val lastKnownStates = mutableMapOf<DeploymentId, DeploymentStateType>()
 
-                val lastKnownStates = mutableMapOf<UUID, DeploymentStateType>()
+            val uploadResult = uploadAllBundles(client, creds, bundleFiles, effectiveType, baseName)
+            val deploymentIds = uploadResult.getOrNull() ?: return uploadResult.errorOrNull()
 
-                try {
-                    waitForAllDeploymentsValidated(client, creds, deploymentIds, effectiveType, maxChecks, checkDelay, lastKnownStates)
+            val validationResult = waitForAllDeploymentsValidated(
+                client, creds, deploymentIds, effectiveType, maxChecks, checkDelay, lastKnownStates
+            )
+            val validationError = validationResult.errorOrNull()
+                ?.let { recoveryHandler.recoverAll(deploymentIds, lastKnownStates, it) }
+            if (validationError != null) return validationError
 
-                    if (effectiveType != requestedType) {
-                        publishAllDeployments(client, creds, deploymentIds)
-                    }
-                } catch (e: DeploymentsAlreadyCleanedUpException) {
-                    // handlePublishFailure already dropped unpublished deployments — just rethrow
-                    throw e
-                } catch (e: Exception) {
-                    val droppableIds = deploymentIds.filter { id ->
-                        val state = lastKnownStates[id]
-                        state == null || state.isDroppable
-                    }
-                    val nonDroppableIds = deploymentIds - droppableIds.toSet()
-
-                    if (nonDroppableIds.isNotEmpty()) {
-                        logger.warn(
-                            "Deployments {} are in non-droppable state and will not be dropped. Check Maven Central Portal.",
-                            nonDroppableIds
-                        )
-                    }
-                    dropAllDeployments(client, creds, droppableIds)
-                    throw e
-                }
+            if (effectiveType != requestedType) {
+                val publishError = publishAllDeployments(client, creds, deploymentIds, recoveryHandler).fold(
+                    onSuccess = { null },
+                    onFailure = { it }
+                )
+                if (publishError != null) return publishError
             }
-        } catch (e: GradleException) {
-            throw e
-        } catch (e: Exception) {
-            throw GradleException("Failed to publish deployment bundles: ${e.message}", e)
+
+            null
+        } finally {
+            client.close()
         }
     }
 
-    private fun uploadAllBundles(
+    private suspend fun uploadAllBundles(
         client: MavenCentralApiClient,
         creds: Credentials,
         bundleFiles: List<File>,
         effectiveType: PublishingType?,
         baseName: String?
-    ): List<UUID> {
-        val deploymentIds = mutableListOf<UUID>()
+    ): Outcome<List<DeploymentId>, DeploymentError> {
+        val deploymentIds = mutableListOf<DeploymentId>()
 
         val totalChunks = bundleFiles.size
-        bundleFiles.forEachIndexed { index, bundleFile ->
+        for ((index, bundleFile) in bundleFiles.withIndex()) {
             val chunkNumber = index + 1
             val chunkName = if (baseName != null) "$baseName-chunk-$chunkNumber" else null
 
@@ -154,85 +163,90 @@ public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
                 deploymentName = chunkName
             )
 
-            when (result) {
-                is HttpResponseResult.Success -> {
-                    val deploymentId = result.data
-                    deploymentIds.add(deploymentId)
-                    logger.lifecycle("Uploading chunk $chunkNumber/$totalChunks... OK (deployment: $deploymentId)")
-                }
-
-                is HttpResponseResult.Error -> {
-                    dropAllDeployments(client, creds, deploymentIds)
-                    throw GradleException(
+            val uploadError = result.foldHttp(
+                onSuccess = { data, _, _ ->
+                    deploymentIds.add(data)
+                    logger.lifecycle("Uploading chunk $chunkNumber/$totalChunks... OK (deployment: $data)")
+                    null
+                },
+                onError = { data, _, httpStatus, _ ->
+                    DeploymentError.UploadFailed(
+                        httpStatus,
                         "Failed to upload chunk $chunkNumber/$totalChunks (${bundleFile.name}): " +
-                                "HTTP ${result.httpStatus}, Response: ${result.data}. " +
+                                "HTTP $httpStatus, Response: $data. " +
                                 "Rolled back ${deploymentIds.size} previously uploaded deployment(s)."
                     )
-                }
-
-                is HttpResponseResult.UnexpectedError -> {
-                    dropAllDeployments(client, creds, deploymentIds)
-                    throw GradleException(
-                        "Unexpected error uploading chunk $chunkNumber/$totalChunks (${bundleFile.name}). " +
-                                "Rolled back ${deploymentIds.size} previously uploaded deployment(s).",
-                        result.cause
+                },
+                onUnexpected = { cause, _, _ ->
+                    DeploymentError.UploadUnexpected(
+                        Exception(
+                            "Unexpected error uploading chunk $chunkNumber/$totalChunks (${bundleFile.name}). " +
+                                    "Rolled back ${deploymentIds.size} previously uploaded deployment(s).",
+                            cause
+                        )
                     )
                 }
+            )
+
+            if (uploadError != null) {
+                for (id in deploymentIds) {
+                    client.tryDropDeployment(creds, id, logger)
+                }
+                return Failure(uploadError)
             }
         }
 
-        return deploymentIds
+        return Success(deploymentIds)
     }
 
-    private fun waitForAllDeploymentsValidated(
+    private suspend fun waitForAllDeploymentsValidated(
         client: MavenCentralApiClient,
         creds: Credentials,
-        deploymentIds: List<UUID>,
+        deploymentIds: List<DeploymentId>,
         effectiveType: PublishingType?,
         maxChecks: Int,
         checkDelay: Duration,
-        lastKnownStates: MutableMap<UUID, DeploymentStateType>
-    ) {
-        val terminalStates = mutableMapOf<UUID, DeploymentStateType>()
+        lastKnownStates: MutableMap<DeploymentId, DeploymentStateType>
+    ): Outcome<Unit, DeploymentError> {
+        val terminalStates = mutableMapOf<DeploymentId, DeploymentStateType>()
 
         repeat(maxChecks) { checkIndex ->
             val checkNumber = checkIndex + 1
             val pendingIds = deploymentIds.filter { it !in terminalStates }
 
             for (deploymentId in pendingIds) {
-                when (val statusResult = client.deploymentStatus(creds, deploymentId)) {
-                    is HttpResponseResult.Success -> {
-                        val status = statusResult.data
+                val statusResult = client.deploymentStatus(creds, deploymentId)
+
+                val error = statusResult.foldHttp(
+                    onSuccess = { status, _, _ ->
                         val state = status.deploymentState
                         lastKnownStates[deploymentId] = state
 
-                        when {
-                            state == DeploymentStateType.FAILED || state == DeploymentStateType.UNKNOWN -> {
-                                throw GradleException(buildString {
-                                    append("Deployment $deploymentId failed with status: $state")
-                                    if (!status.errors.isNullOrEmpty()) {
-                                        append("\nErrors: ${status.errors}")
-                                    }
-                                })
+                        when (state) {
+                            DeploymentStateType.FAILED, DeploymentStateType.UNKNOWN -> {
+                                DeploymentError.DeploymentFailed(state, status.errors)
                             }
-
-                            state == DeploymentStateType.PUBLISHED -> {
+                            DeploymentStateType.PUBLISHED -> {
                                 terminalStates[deploymentId] = state
+                                null
                             }
-
-                            state == DeploymentStateType.VALIDATED && effectiveType == PublishingType.USER_MANAGED -> {
+                            DeploymentStateType.VALIDATED if effectiveType == PublishingType.USER_MANAGED -> {
                                 terminalStates[deploymentId] = state
+                                null
                             }
+                            else -> null
                         }
+                    },
+                    onError = { data, _, httpStatus, _ ->
+                        DeploymentError.StatusCheckFailed(httpStatus, data)
+                    },
+                    onUnexpected = { cause, _, _ ->
+                        DeploymentError.StatusCheckUnexpected(cause)
                     }
+                )
 
-                    is HttpResponseResult.Error -> throw GradleException(
-                        "Failed to check deployment status for $deploymentId: HTTP ${statusResult.httpStatus}, Response: ${statusResult.data}"
-                    )
-
-                    is HttpResponseResult.UnexpectedError -> throw GradleException(
-                        "Unexpected error checking deployment status for $deploymentId", statusResult.cause
-                    )
+                if (error != null) {
+                    return Failure(error)
                 }
             }
 
@@ -244,115 +258,70 @@ public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
 
             if (terminalStates.size == deploymentIds.size) {
                 logger.lifecycle("All ${deploymentIds.size} deployment(s) validated successfully.")
-                return
+                return Success(Unit)
             }
 
             if (checkNumber < maxChecks) {
-                try {
-                    Thread.sleep(checkDelay.toMillis())
-                } catch (e: InterruptedException) {
-                    Thread.currentThread().interrupt()
-                    throw e
-                }
+                delay(checkDelay.toMillis())
             }
         }
 
-        throw GradleException(
-            "Deployments did not complete after $maxChecks status checks. " +
-                    "Check Maven Central Portal for current status."
+        return Failure(
+            DeploymentError.Timeout(
+                state = lastKnownStates.values.lastOrNull() ?: DeploymentStateType.UNKNOWN,
+                maxChecks = maxChecks
+            )
         )
     }
 
-    private fun publishAllDeployments(
+    private suspend fun publishAllDeployments(
         client: MavenCentralApiClient,
         creds: Credentials,
-        deploymentIds: List<UUID>
-    ) {
+        deploymentIds: List<DeploymentId>,
+        recoveryHandler: DeploymentRecoveryHandler
+    ): Outcome<Unit, DeploymentError> {
         logger.lifecycle("Publishing all ${deploymentIds.size} deployment(s)...")
 
-        val publishedIds = mutableSetOf<UUID>()
+        val publishedIds = mutableSetOf<DeploymentId>()
 
         for (deploymentId in deploymentIds) {
-            when (val result = client.publishDeployment(creds, deploymentId)) {
-                is HttpResponseResult.Success -> {
+            val result = client.publishDeployment(creds, deploymentId)
+
+            val error = result.foldHttp(
+                onSuccess = { _, _, _ ->
                     publishedIds.add(deploymentId)
                     logger.lifecycle("Published deployment $deploymentId")
+                    null
+                },
+                onError = { _, _, httpStatus, _ ->
+                    DeploymentError.PublishFailed(deploymentId, httpStatus)
+                },
+                onUnexpected = { cause, _, _ ->
+                    DeploymentError.PublishUnexpected(deploymentId, cause)
                 }
+            )
 
-                is HttpResponseResult.Error -> {
-                    handlePublishFailure(client, creds, deploymentIds, publishedIds, deploymentId,
-                        "Failed to publish deployment $deploymentId: HTTP ${result.httpStatus}.", null)
-                }
-
-                is HttpResponseResult.UnexpectedError -> {
-                    handlePublishFailure(client, creds, deploymentIds, publishedIds, deploymentId,
-                        "Unexpected error publishing deployment $deploymentId.", result.cause)
-                }
+            if (error != null) {
+                val recovered = recoveryHandler.recoverPublishFailure(deploymentIds, publishedIds, deploymentId, error)
+                return Failure(recovered)
             }
         }
 
         logger.lifecycle("Published successfully.")
+        return Success(Unit)
     }
 
-    private fun handlePublishFailure(
-        client: MavenCentralApiClient,
-        creds: Credentials,
-        deploymentIds: List<UUID>,
-        publishedIds: Set<UUID>,
-        failedId: UUID,
-        message: String,
-        cause: Exception?
-    ): Nothing {
-        val unpublished = deploymentIds.filter { it !in publishedIds && it != failedId }
-        dropAllDeployments(client, creds, unpublished)
-
-        throw DeploymentsAlreadyCleanedUpException(
-            "$message WARNING: ${publishedIds.size} deployment(s) may already be published " +
-                    "and cannot be rolled back (API limitation). " +
-                    "Dropped ${unpublished.size} remaining unpublished deployment(s).",
-            cause
-        )
-    }
-
-    private fun dropAllDeployments(
-        client: MavenCentralApiClient,
-        creds: Credentials,
-        deploymentIds: List<UUID>
-    ) {
-        for (deploymentId in deploymentIds) {
-            client.tryDropDeployment(creds, deploymentId, logger)
-        }
-    }
-
-    private fun validateInputs() {
-        if (!bundlesDirectory.isPresent) {
-            throw GradleException("Property 'bundlesDirectory' is required but not set")
-        }
-
-        if (!credentials.isPresent) {
-            throw GradleException("Property 'credentials' is required but not set")
-        }
+    private fun validateInputs(): Outcome<Unit, ValidationError> {
+        if (!bundlesDirectory.isPresent) return Failure(ValidationError.MissingProperty("bundlesDirectory"))
+        if (!credentials.isPresent) return Failure(ValidationError.MissingProperty("credentials"))
 
         val dir = bundlesDirectory.asFile.get()
-        if (!dir.exists()) {
-            throw GradleException("Bundles directory does not exist: ${dir.absolutePath}")
-        }
-
-        if (!dir.isDirectory) {
-            throw GradleException("Bundles path is not a directory: ${dir.absolutePath}")
-        }
+        if (!dir.exists()) return Failure(ValidationError.InvalidFile(dir.absolutePath, "Bundles directory does not exist"))
+        if (!dir.isDirectory) return Failure(ValidationError.InvalidFile(dir.absolutePath, "Bundles path is not a directory"))
 
         val maxChecks = maxStatusChecks.get()
-        if (maxChecks < 1) {
-            throw GradleException("maxStatusChecks must be at least 1, got: $maxChecks")
-        }
+        if (maxChecks < 1) return Failure(ValidationError.InvalidValue("maxStatusChecks", "must be at least 1, got: $maxChecks"))
+
+        return Success(Unit)
     }
 }
-
-/**
- * Signals that [handlePublishFailure] already performed cleanup (dropped unpublished deployments).
- * The outer catch block should NOT attempt additional drops when it sees this exception.
- */
-internal class DeploymentsAlreadyCleanedUpException(
-    message: String, cause: Exception?
-) : GradleException(message, cause)

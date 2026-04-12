@@ -1,7 +1,9 @@
-package io.github.zenhelix.gradle.plugin.utils
+package io.github.zenhelix.gradle.plugin.client
 
+import io.github.zenhelix.gradle.plugin.client.model.ChunkError
+import io.github.zenhelix.gradle.plugin.utils.assertFailure
+import io.github.zenhelix.gradle.plugin.utils.assertSuccess
 import org.assertj.core.api.Assertions.assertThat
-import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 
 class BundleChunkerTest {
@@ -9,7 +11,7 @@ class BundleChunkerTest {
     @Test
     fun `single module within limit produces one chunk`() {
         val modules = listOf(ModuleSize("core", 100))
-        val chunks = BundleChunker.chunk(modules, maxChunkSize = 256)
+        val chunks = assertSuccess<List<Chunk>>(BundleChunker.chunk(modules, maxChunkSize = 256))
 
         assertThat(chunks).hasSize(1)
         assertThat(chunks[0].moduleNames).containsExactly("core")
@@ -23,7 +25,7 @@ class BundleChunkerTest {
             ModuleSize("api", 80),
             ModuleSize("utils", 30)
         )
-        val chunks = BundleChunker.chunk(modules, maxChunkSize = 256)
+        val chunks = assertSuccess<List<Chunk>>(BundleChunker.chunk(modules, maxChunkSize = 256))
 
         assertThat(chunks).hasSize(1)
         assertThat(chunks[0].moduleNames).containsExactlyInAnyOrder("core", "api", "utils")
@@ -37,7 +39,7 @@ class BundleChunkerTest {
             ModuleSize("medium", 150),
             ModuleSize("small", 50)
         )
-        val chunks = BundleChunker.chunk(modules, maxChunkSize = 256)
+        val chunks = assertSuccess<List<Chunk>>(BundleChunker.chunk(modules, maxChunkSize = 256))
 
         assertThat(chunks).hasSize(2)
         // FFD: sorted desc -> large(200), medium(150), small(50)
@@ -51,34 +53,33 @@ class BundleChunkerTest {
     @Test
     fun `module exactly at limit produces one chunk`() {
         val modules = listOf(ModuleSize("exact", 256))
-        val chunks = BundleChunker.chunk(modules, maxChunkSize = 256)
+        val chunks = assertSuccess<List<Chunk>>(BundleChunker.chunk(modules, maxChunkSize = 256))
 
         assertThat(chunks).hasSize(1)
         assertThat(chunks[0].moduleNames).containsExactly("exact")
     }
 
     @Test
-    fun `module exceeding limit throws exception`() {
+    fun `module exceeding limit returns Failure with ModuleTooLarge`() {
         val modules = listOf(ModuleSize(":big-module", 300))
 
-        assertThatThrownBy {
-            BundleChunker.chunk(modules, maxChunkSize = 256)
-        }.isInstanceOf(BundleSizeExceededException::class.java)
-            .hasMessageContaining(":big-module")
-            .hasMessageContaining("300")
-            .hasMessageContaining("256")
+        val error = assertFailure<ChunkError.ModuleTooLarge>(BundleChunker.chunk(modules, maxChunkSize = 256))
+
+        assertThat(error.moduleName).isEqualTo(":big-module")
+        assertThat(error.moduleSize).isEqualTo(300)
+        assertThat(error.maxSize).isEqualTo(256)
     }
 
     @Test
     fun `empty module list produces empty chunk list`() {
-        val chunks = BundleChunker.chunk(emptyList(), maxChunkSize = 256)
+        val chunks = assertSuccess<List<Chunk>>(BundleChunker.chunk(emptyList(), maxChunkSize = 256))
         assertThat(chunks).isEmpty()
     }
 
     @Test
     fun `many small modules packed efficiently`() {
         val modules = (1..10).map { ModuleSize("mod-$it", 30) }
-        val chunks = BundleChunker.chunk(modules, maxChunkSize = 100)
+        val chunks = assertSuccess<List<Chunk>>(BundleChunker.chunk(modules, maxChunkSize = 100))
 
         // 10 modules * 30 = 300 total. Each chunk fits 3 modules (90 <= 100).
         // FFD: all same size, so 4 chunks: 3+3+3+1

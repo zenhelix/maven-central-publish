@@ -54,6 +54,7 @@ testing {
         val test by getting(JvmTestSuite::class) {
             dependencies {
                 implementation("io.mockk:mockk:1.14.9")
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
             }
         }
         val functionalTest by registering(JvmTestSuite::class) {
@@ -128,6 +129,7 @@ gradlePlugin {
 dependencies {
     compileOnly("org.jetbrains.kotlin:kotlin-gradle-plugin:2.3.20")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.21.2")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
 }
 
 publishing {

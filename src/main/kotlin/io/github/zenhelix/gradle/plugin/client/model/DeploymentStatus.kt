@@ -1,9 +1,7 @@
 package io.github.zenhelix.gradle.plugin.client.model
 
-import java.util.UUID
-
 public data class DeploymentStatus(
-    val deploymentId: UUID,
+    val deploymentId: DeploymentId,
     val deploymentName: String,
     val deploymentState: DeploymentStateType,
     val purls: List<String>?,
@@ -33,7 +31,7 @@ public enum class DeploymentStateType(internal val id: String) {
     UNKNOWN("");
 
     public companion object {
-        public fun ofOrNull(value: String): DeploymentStateType? = values().firstOrNull { it.id.equals(value, true) }
+        public fun ofOrNull(value: String): DeploymentStateType? = entries.firstOrNull { it.id.equals(value, ignoreCase = true) }
         public fun of(value: String): DeploymentStateType = ofOrNull(value) ?: UNKNOWN
     }
 }

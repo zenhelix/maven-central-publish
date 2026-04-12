@@ -1,37 +1,15 @@
 package io.github.zenhelix.gradle.plugin
 
+import io.github.zenhelix.gradle.plugin.configurator.RootProjectConfigurator
+import io.github.zenhelix.gradle.plugin.configurator.SubprojectConfigurator
+import io.github.zenhelix.gradle.plugin.configurator.ZipDeploymentConfigurator
 import io.github.zenhelix.gradle.plugin.extension.MavenCentralUploaderExtension
 import io.github.zenhelix.gradle.plugin.extension.MavenCentralUploaderExtension.Companion.MAVEN_CENTRAL_UPLOADER_EXTENSION_NAME
-import io.github.zenhelix.gradle.plugin.task.CreateChecksumTask
-import io.github.zenhelix.gradle.plugin.task.PublicationInfo
-import io.github.zenhelix.gradle.plugin.task.ZipDeploymentTask
-import io.github.zenhelix.gradle.plugin.utils.findMavenPublications
-import io.github.zenhelix.gradle.plugin.utils.findPublishLifecycleTask
-import io.github.zenhelix.gradle.plugin.utils.hasMavenCentralPortalExtension
-import io.github.zenhelix.gradle.plugin.utils.mapModel
-import io.github.zenhelix.gradle.plugin.utils.registerChecksumTask
-import io.github.zenhelix.gradle.plugin.utils.registerChecksumsAllPublicationsTask
-import io.github.zenhelix.gradle.plugin.utils.registerPublishAllPublicationsTask
-import io.github.zenhelix.gradle.plugin.utils.registerPublishSplitAllModulesTask
-import io.github.zenhelix.gradle.plugin.utils.registerSplitZipAllModulesTask
-import io.github.zenhelix.gradle.plugin.utils.registerPublishPublicationTask
-import io.github.zenhelix.gradle.plugin.utils.registerZipAllPublicationsTask
-import io.github.zenhelix.gradle.plugin.utils.registerZipPublicationTask
-import org.gradle.api.NamedDomainObjectCollection
 import org.gradle.api.Plugin
 import org.gradle.api.Project
-import org.gradle.api.Task
-import org.gradle.api.provider.ListProperty
-import org.gradle.api.publish.maven.internal.publication.MavenPublicationInternal
 import org.gradle.api.publish.maven.plugins.MavenPublishPlugin
-import org.gradle.api.tasks.TaskDependency
-import org.gradle.api.tasks.TaskProvider
-import org.gradle.internal.extensions.stdlib.capitalized
 import org.gradle.kotlin.dsl.apply
 import org.gradle.kotlin.dsl.create
-import org.gradle.kotlin.dsl.listProperty
-import org.gradle.kotlin.dsl.named
-import org.gradle.kotlin.dsl.register
 import org.gradle.plugins.signing.SigningPlugin
 
 /**
@@ -45,9 +23,9 @@ import org.gradle.plugins.signing.SigningPlugin
  *   do not trigger independent Maven Central uploads.
  *
  * Mode detection:
- * - Plugin on root + subprojects with publications → atomic aggregation
- * - Plugin on root only (no subproject publications) → independent (single-module)
- * - Plugin on subprojects only → independent per subproject (with warning)
+ * - Plugin on root + subprojects with publications -> atomic aggregation
+ * - Plugin on root only (no subproject publications) -> independent (single-module)
+ * - Plugin on subprojects only -> independent per subproject (with warning)
  */
 public class MavenCentralUploaderPlugin : Plugin<Project> {
 
@@ -57,251 +35,21 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
             apply(SigningPlugin::class)
         }
 
-        val mavenCentralUploaderExtension: MavenCentralUploaderExtension = target.createExtension()
+        val extension = target.extensions.create<MavenCentralUploaderExtension>(
+            MAVEN_CENTRAL_UPLOADER_EXTENSION_NAME
+        )
 
-        // Configure standard tasks for all projects (including root) in afterEvaluate
-        target.afterEvaluate {
-            configureZipDeploymentTasks(this, mavenCentralUploaderExtension)
-        }
+        ZipDeploymentConfigurator.configure(target, extension)
 
-        // Configure lifecycle and aggregation only for root project
         if (target == target.rootProject) {
-            target.gradle.projectsEvaluated {
-                configureRootProjectLifecycle(target, mavenCentralUploaderExtension)
-            }
+            RootProjectConfigurator.configure(target, extension)
         } else {
-            // Subproject: register one-time warning check on root
-            val rootProject = target.rootProject
-            if (!rootProject.extensions.extraProperties.has(WARN_REGISTERED_FLAG)) {
-                rootProject.extensions.extraProperties[WARN_REGISTERED_FLAG] = true
-                target.gradle.projectsEvaluated {
-                    emitIndependentPublishingWarningIfNeeded(rootProject)
-                }
-            }
+            SubprojectConfigurator.configure(target)
         }
     }
-
-    private fun configureZipDeploymentTasks(project: Project, extension: MavenCentralUploaderExtension) {
-        val publications = project.findMavenPublications() ?: return
-
-        // Register aggregation tasks first (they'll collect per-publication content lazily)
-        val checksumsAllPublicationsTask = project.registerChecksumsAllPublicationsTask()
-
-        val zipAllPublicationsTask = project.registerZipAllPublicationsTask {
-            archiveFileName.set(project.provider { "${project.name}-allPublications-${project.version}.zip" })
-        }
-
-        val publishAllPublicationsTask = project.registerPublishAllPublicationsTask(extension) {
-            dependsOn(zipAllPublicationsTask)
-            zipFile.set(zipAllPublicationsTask.flatMap { it.archiveFile })
-        }
-
-        // Wire publish lifecycle task to Maven Central Portal publish task
-        project.findPublishLifecycleTask().configure {
-            dependsOn(publishAllPublicationsTask)
-        }
-
-        // React to each publication (existing and future)
-        publications.configureEach {
-            val publication = this as MavenPublicationInternal
-            val publicationName = publication.name
-
-            val taskDependencies = project.objects.listProperty<TaskDependency>().apply {
-                publication.allPublishableArtifacts { this@apply.addAll(buildDependencies) }
-            }
-
-            val checksumTask = project.registerChecksumTask(publicationName) {
-                dependsOn(taskDependencies)
-            }
-
-            val publicationInfo = publication.mapModel(project, checksumTask)
-
-            val zipTask = project.registerZipPublicationTask(publicationName) {
-                dependsOn(taskDependencies)
-                dependsOn(checksumTask)
-
-                this.publications.add(publicationInfo)
-
-                archiveFileName.set(project.provider { "${project.name}-${publicationName}-${project.version}.zip" })
-
-                configureContentFor(publicationInfo)
-            }
-
-            project.registerPublishPublicationTask(publicationName, extension) {
-                dependsOn(zipTask)
-                zipFile.set(zipTask.flatMap { it.archiveFile })
-            }
-
-            // Wire into aggregation tasks
-            checksumsAllPublicationsTask.configure {
-                dependsOn(checksumTask)
-            }
-
-            zipAllPublicationsTask.configure {
-                dependsOn(taskDependencies)
-                dependsOn(checksumTask)
-
-                this.publications.add(publicationInfo)
-
-                configureContentFor(publicationInfo)
-            }
-        }
-    }
-
-    /**
-     * Configures the root project's publish lifecycle based on whether subprojects have publications.
-     *
-     * When subprojects have publications, this activates **atomic aggregation mode**:
-     * all modules are bundled into a single deployment. To prevent duplicate deployments,
-     * the per-project `publishAllPublicationsToMavenCentralPortalRepository` tasks are unwired
-     * from the `publish` lifecycle task — both for subprojects and the root project itself.
-     * The root `publish` task is then wired to `publishAllModulesToMavenCentralPortalRepository`
-     * which handles the aggregated bundle.
-     *
-     * Without subproject publications, single-module mode is used (wired in [configureZipDeploymentTasks]).
-     */
-    private fun configureRootProjectLifecycle(rootProject: Project, extension: MavenCentralUploaderExtension) {
-        val subprojectsWithPublications = rootProject.subprojects.filter {
-            it.findMavenPublications()?.isNotEmpty() == true
-        }
-
-        if (subprojectsWithPublications.isNotEmpty()) {
-            // Mode 2: Atomic aggregation — create aggregation and override subproject wiring
-            createAggregationTasks(rootProject, extension)
-
-            rootProject.findPublishLifecycleTask().configure {
-                rootProject.tasks.findByName("publishAllModulesToMavenCentralPortalRepository")?.also { dependsOn(it) }
-            }
-
-            // Remove per-project publish -> Maven Central wiring to avoid duplicate deployments
-            // This applies to both subprojects and the root project itself
-            val projectsToUnwire = subprojectsWithPublications + rootProject
-            projectsToUnwire.forEach { project ->
-                project.findPublishLifecycleTask().configure {
-                    setDependsOn(dependsOn.filterNot { dep ->
-                        val name = when (dep) {
-                            is TaskProvider<*> -> dep.name
-                            is Task -> dep.name
-                            is String -> dep
-                            else -> null
-                        }
-                        name == PUBLISH_ALL_PUBLICATIONS_TASK_NAME
-                    })
-                }
-            }
-        }
-        // Mode 1 single-module: lifecycle wiring already done in configureZipDeploymentTasks
-    }
-
-    private fun emitIndependentPublishingWarningIfNeeded(rootProject: Project) {
-        // Skip if root has the plugin (aggregation mode handles this)
-        if (rootProject.hasMavenCentralPortalExtension()) {
-            return
-        }
-
-        val subprojectsWithPlugin = rootProject.subprojects.filter { it.hasMavenCentralPortalExtension() }
-
-        if (subprojectsWithPlugin.size > 1) {
-            rootProject.logger.warn(
-                "Multiple projects publish to Maven Central independently. For atomic multi-module publishing, apply the plugin to the root project."
-            )
-        }
-    }
-
-    private fun createAggregationTasks(rootProject: Project, extension: MavenCentralUploaderExtension) {
-        val allPublicationsInfo = mutableListOf<PublicationInfo>()
-        val allChecksumsAndBuildTasks = mutableListOf<Any>()
-
-        // Process root project publications if any
-        val rootPublications = rootProject.findMavenPublications()
-        if (!rootPublications.isNullOrEmpty()) {
-            val rootTaskDependencies: Map<String, ListProperty<TaskDependency>> =
-                rootPublications.associateBy({ it.name }) { publication ->
-                    rootProject.objects.listProperty<TaskDependency>().apply {
-                        publication.allPublishableArtifacts { this@apply.addAll(buildDependencies) }
-                    }
-                }
-
-            val rootPublicationInfos = rootPublications.associateWith { publication ->
-                publication.mapModel(
-                    rootProject,
-                    rootProject.tasks.named<CreateChecksumTask>("checksum${publication.name.capitalized()}Publication")
-                )
-            }
-
-            allPublicationsInfo.addAll(rootPublicationInfos.values)
-            allChecksumsAndBuildTasks.addAll(rootTaskDependencies.values)
-
-            // Also add the root project's checksum tasks so they run before zipDeploymentAllModules
-            rootPublications.forEach { publication ->
-                rootProject.tasks.findByName("checksum${publication.name.capitalized()}Publication")?.let {
-                    allChecksumsAndBuildTasks.add(it)
-                }
-            }
-        }
-
-        // Process subprojects
-        rootProject.subprojects.forEach { subproject ->
-            subproject.tasks.findByName("checksumAllPublications")?.let { checksumTask ->
-                allChecksumsAndBuildTasks.add(checksumTask)
-            }
-
-            val publications = subproject.findMavenPublications()
-            publications?.forEach { publication ->
-                val publicationDependencies = subproject.objects.listProperty<TaskDependency>().apply {
-                    publication.allPublishableArtifacts { this@apply.addAll(buildDependencies) }
-                }
-                allChecksumsAndBuildTasks.add(publicationDependencies)
-
-                val checksumTask = subproject.tasks.findByName("checksum${publication.name.capitalized()}Publication")
-
-                if (checksumTask is CreateChecksumTask) {
-                    val publicationInfo = publication.mapModel(
-                        subproject,
-                        subproject.tasks.named(
-                            "checksum${publication.name.capitalized()}Publication",
-                            CreateChecksumTask::class.java
-                        )
-                    )
-                    allPublicationsInfo.add(publicationInfo)
-                }
-            }
-        }
-
-        if (allPublicationsInfo.isNotEmpty()) {
-            val splitZipTask = rootProject.registerSplitZipAllModulesTask {
-                dependsOn(allChecksumsAndBuildTasks)
-
-                this.publications.addAll(allPublicationsInfo)
-
-                maxBundleSize.set(extension.uploader.maxBundleSize)
-                archiveBaseName.set(rootProject.provider {
-                    "${rootProject.name}-allModules-${rootProject.version}"
-                })
-                outputDirectory.set(
-                    rootProject.layout.buildDirectory.dir("maven-central-split-bundles")
-                )
-            }
-
-            rootProject.registerPublishSplitAllModulesTask(extension) {
-                dependsOn(splitZipTask)
-                bundlesDirectory.set(splitZipTask.flatMap { it.outputDirectory })
-            }
-        }
-    }
-
-    private fun Project.createExtension(
-    ): MavenCentralUploaderExtension = this.extensions.create<MavenCentralUploaderExtension>(
-        MAVEN_CENTRAL_UPLOADER_EXTENSION_NAME
-    )
 
     public companion object {
         public const val MAVEN_CENTRAL_PORTAL_NAME: String = "mavenCentralPortal"
         public const val MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID: String = "io.github.zenhelix.maven-central-publish"
-
-        private val PUBLISH_ALL_PUBLICATIONS_TASK_NAME: String =
-            "publishAllPublicationsTo${MAVEN_CENTRAL_PORTAL_NAME.capitalized()}Repository"
-
-        private const val WARN_REGISTERED_FLAG: String = "io.github.zenhelix.maven-central-publish.warnRegistered"
     }
 }

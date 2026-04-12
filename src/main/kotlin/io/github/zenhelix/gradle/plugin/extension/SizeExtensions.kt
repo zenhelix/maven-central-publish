@@ -1,8 +1,8 @@
-package io.github.zenhelix.gradle.plugin.utils
+package io.github.zenhelix.gradle.plugin.extension
 
-internal const val BYTES_PER_KB: Long = 1024L
-internal const val BYTES_PER_MB: Long = 1024L * 1024L
-internal const val BYTES_PER_GB: Long = 1024L * 1024L * 1024L
+internal const val BYTES_PER_KB = 1024L
+internal const val BYTES_PER_MB = 1024L * 1024L
+internal const val BYTES_PER_GB = 1024L * 1024L * 1024L
 
 public val Int.megabytes: Long get() = this.toLong() * BYTES_PER_MB
 public val Int.gigabytes: Long get() = this.toLong() * BYTES_PER_GB

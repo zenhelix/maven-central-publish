@@ -1,15 +1,12 @@
 package io.github.zenhelix.gradle.plugin.utils
 
+import io.github.zenhelix.gradle.plugin.client.model.Failure
+import io.github.zenhelix.gradle.plugin.client.model.Outcome
+import io.github.zenhelix.gradle.plugin.client.model.Success
 import java.time.Duration
+import kotlinx.coroutines.delay
 import org.gradle.api.logging.Logger
 
-/**
- * Retry handler with exponential backoff support.
- *
- * @param maxRetries Maximum number of retry attempts
- * @param baseDelay Base delay between retries (will be exponentially increased)
- * @param logger Optional logger for retry events
- */
 public class RetryHandler(
     private val maxRetries: Int,
     private val baseDelay: Duration,
@@ -22,64 +19,48 @@ public class RetryHandler(
         }
     }
 
-    /**
-     * Executes the given operation with retry logic and exponential backoff.
-     *
-     * @param T Result type
-     * @param operation Operation to execute (receives current attempt number 1-based)
-     * @param shouldRetry Predicate to determine if retry should happen based on exception
-     * @param onRetry Optional callback before each retry (receives attempt number and exception)
-     * @return Result of successful operation
-     * @throws Exception Last exception if all retries failed
-     */
-    public fun <T> executeWithRetry(
-        operation: (attempt: Int) -> T,
+    public suspend fun <T> executeWithRetry(
+        operation: suspend (attempt: Int) -> Outcome<T, Exception>,
         shouldRetry: (Exception) -> Boolean = { true },
         onRetry: ((attempt: Int, exception: Exception) -> Unit)? = null
-    ): T {
+    ): Outcome<T, Exception> {
         var attempt = 1
-        var lastException: Exception? = null
+        var lastError: Exception? = null
 
         while (attempt <= maxRetries) {
-            try {
-                return operation(attempt)
-            } catch (e: Exception) {
-                lastException = e
+            val result = operation(attempt)
 
-                if (!shouldRetry(e)) {
-                    logger.debug("Exception is not retriable, failing immediately: ${e.message}")
-                    throw e
+            when (result) {
+                is Success -> return result
+                is Failure -> {
+                    lastError = result.error
+
+                    if (!shouldRetry(result.error)) {
+                        logger.debug("Exception is not retriable, failing immediately: {}", result.error.message)
+                        return result
+                    }
+
+                    if (attempt >= maxRetries) {
+                        logger.warn("Operation failed after {} attempts", maxRetries, result.error)
+                        return result
+                    }
+
+                    onRetry?.invoke(attempt, result.error)
+
+                    val delayMillis = calculateBackoffDelay(attempt)
+                    logger.debug("Retrying after {}ms (attempt {}/{}): {}", delayMillis, attempt, maxRetries, result.error.message)
+
+                    delay(delayMillis)
                 }
-
-                if (attempt >= maxRetries) {
-                    logger.warn("Operation failed after $maxRetries attempts", e)
-                    throw e
-                }
-
-                onRetry?.invoke(attempt, e)
-
-                val delayMillis = calculateBackoffDelay(attempt)
-                logger.debug("Retrying after ${delayMillis}ms (attempt $attempt/$maxRetries): ${e.message}")
-
-                try {
-                    Thread.sleep(delayMillis)
-                } catch (e: InterruptedException) {
-                    Thread.currentThread().interrupt()
-                    throw e
-                }
+                else -> return result
             }
 
             attempt++
         }
 
-        throw lastException ?: Exception("Operation failed after $maxRetries attempts")
+        return Failure(lastError ?: Exception("Operation failed after $maxRetries attempts"))
     }
 
-    /**
-     * Calculates exponential backoff delay: baseDelay * 2^(attempt-1).
-     * The shift is capped at 30 to prevent Long overflow for large attempt values.
-     * The result is also capped at [MAX_BACKOFF_DELAY_MILLIS] to keep delays practical.
-     */
     internal fun calculateBackoffDelay(attempt: Int): Long {
         val maxShift = 30
         val shift = (attempt - 1).coerceAtMost(maxShift)
@@ -87,16 +68,6 @@ public class RetryHandler(
     }
 
     internal companion object {
-        /** Maximum backoff delay: 5 minutes. */
-        internal const val MAX_BACKOFF_DELAY_MILLIS: Long = 5 * 60 * 1000L
+        internal const val MAX_BACKOFF_DELAY_MILLIS = 5 * 60 * 1000L
     }
 }
-
-/**
- * Creates a RetryHandler with common defaults.
- */
-public fun retryHandler(
-    maxRetries: Int = 3,
-    baseDelay: Duration = Duration.ofSeconds(2),
-    logger: Logger
-): RetryHandler = RetryHandler(maxRetries, baseDelay, logger)
