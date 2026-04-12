@@ -7,9 +7,9 @@ import io.github.zenhelix.gradle.plugin.client.model.DeploymentStatus
 import io.github.zenhelix.gradle.plugin.client.model.HttpResponseResult
 import io.github.zenhelix.gradle.plugin.client.model.MavenCentralDeploymentException
 import io.github.zenhelix.gradle.plugin.client.model.PublishingType
-import io.mockk.every
+import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.mockk
-import io.mockk.verify
 import java.io.File
 import java.time.Duration
 import java.util.UUID
@@ -33,7 +33,7 @@ class PublishSplitBundleDropBehaviorTest {
     fun setUp() {
         mockClient = mockk(relaxed = true)
 
-        every { mockClient.uploadDeploymentBundle(any(), any(), any(), any()) } returns
+        coEvery { mockClient.uploadDeploymentBundle(any(), any(), any(), any()) } returns
                 HttpResponseResult.Success(deploymentId)
     }
 
@@ -77,26 +77,26 @@ class PublishSplitBundleDropBehaviorTest {
     fun `should drop deployment when timeout occurs in VALIDATING state`() {
         val bundlesDir = createBundleFiles(1)
 
-        every { mockClient.deploymentStatus(any(), any()) } returns statusReturning(DeploymentStateType.VALIDATING)
-        every { mockClient.dropDeployment(any(), any()) } returns HttpResponseResult.Success(Unit)
+        coEvery { mockClient.deploymentStatus(any(), any()) } returns statusReturning(DeploymentStateType.VALIDATING)
+        coEvery { mockClient.dropDeployment(any(), any()) } returns HttpResponseResult.Success(Unit)
 
         assertThatThrownBy { executePublishSplitTask(bundlesDir) }
             .isInstanceOf(MavenCentralDeploymentException::class.java)
             .hasMessageContaining("did not complete after 2 status checks")
 
-        verify(exactly = 1) { mockClient.dropDeployment(any(), eq(deploymentId)) }
+        coVerify(exactly = 1) { mockClient.dropDeployment(any(), eq(deploymentId)) }
     }
 
     @Test
     fun `should NOT drop deployment when timeout occurs in PUBLISHING state`() {
         val bundlesDir = createBundleFiles(1)
 
-        every { mockClient.deploymentStatus(any(), any()) } returns statusReturning(DeploymentStateType.PUBLISHING)
+        coEvery { mockClient.deploymentStatus(any(), any()) } returns statusReturning(DeploymentStateType.PUBLISHING)
 
         assertThatThrownBy { executePublishSplitTask(bundlesDir) }
             .isInstanceOf(MavenCentralDeploymentException::class.java)
 
-        verify(exactly = 0) { mockClient.dropDeployment(any(), any()) }
+        coVerify(exactly = 0) { mockClient.dropDeployment(any(), any()) }
     }
 
     @Test
@@ -109,25 +109,25 @@ class PublishSplitBundleDropBehaviorTest {
         val id2 = UUID.fromString("22222222-2222-2222-2222-222222222222")
 
         var uploadCount = 0
-        every { mockClient.uploadDeploymentBundle(any(), any(), any(), any()) } answers {
+        coEvery { mockClient.uploadDeploymentBundle(any(), any(), any(), any()) } answers {
             uploadCount++
             HttpResponseResult.Success(if (uploadCount == 1) id1 else id2)
         }
 
         // Both validated successfully
-        every { mockClient.deploymentStatus(any(), eq(id1)) } returns HttpResponseResult.Success(
+        coEvery { mockClient.deploymentStatus(any(), eq(id1)) } returns HttpResponseResult.Success(
             DeploymentStatus(id1, "test", DeploymentStateType.VALIDATED, null, null)
         )
-        every { mockClient.deploymentStatus(any(), eq(id2)) } returns HttpResponseResult.Success(
+        coEvery { mockClient.deploymentStatus(any(), eq(id2)) } returns HttpResponseResult.Success(
             DeploymentStatus(id2, "test", DeploymentStateType.VALIDATED, null, null)
         )
 
         // Publish id1 succeeds, publish id2 fails
-        every { mockClient.publishDeployment(any(), eq(id1)) } returns HttpResponseResult.Success(Unit)
-        every { mockClient.publishDeployment(any(), eq(id2)) } returns HttpResponseResult.Error(
+        coEvery { mockClient.publishDeployment(any(), eq(id1)) } returns HttpResponseResult.Success(Unit)
+        coEvery { mockClient.publishDeployment(any(), eq(id2)) } returns HttpResponseResult.Error(
             data = "Internal error", httpStatus = 500
         )
-        every { mockClient.dropDeployment(any(), any()) } returns HttpResponseResult.Success(Unit)
+        coEvery { mockClient.dropDeployment(any(), any()) } returns HttpResponseResult.Success(Unit)
 
         assertThatThrownBy { executePublishSplitTask(bundlesDir) }
             .isInstanceOf(MavenCentralDeploymentException::class.java)
@@ -136,18 +136,18 @@ class PublishSplitBundleDropBehaviorTest {
         // It should only drop remaining unpublished deployments (none in this case —
         // id1 is published, id2 is the failed one)
         // The key assertion: drop should NOT be called for id1 (already published)
-        verify(exactly = 0) { mockClient.dropDeployment(any(), eq(id1)) }
+        coVerify(exactly = 0) { mockClient.dropDeployment(any(), eq(id1)) }
     }
 
     @Test
     fun `should succeed when single deployment reaches PUBLISHED state`() {
         val bundlesDir = createBundleFiles(1)
 
-        every { mockClient.deploymentStatus(any(), any()) } returns statusReturning(DeploymentStateType.PUBLISHED)
+        coEvery { mockClient.deploymentStatus(any(), any()) } returns statusReturning(DeploymentStateType.PUBLISHED)
 
         executePublishSplitTask(bundlesDir) // Should not throw
 
-        verify(exactly = 0) { mockClient.dropDeployment(any(), any()) }
+        coVerify(exactly = 0) { mockClient.dropDeployment(any(), any()) }
     }
 }
 

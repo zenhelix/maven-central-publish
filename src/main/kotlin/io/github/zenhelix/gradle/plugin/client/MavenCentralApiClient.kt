@@ -9,14 +9,14 @@ import java.util.UUID
 
 public interface MavenCentralApiClient : AutoCloseable {
 
-    public fun uploadDeploymentBundle(
+    public suspend fun uploadDeploymentBundle(
         credentials: Credentials, bundle: Path, publishingType: PublishingType? = null, deploymentName: String? = null
     ): HttpResponseResult<UUID, String>
 
-    public fun deploymentStatus(credentials: Credentials, deploymentId: UUID): HttpResponseResult<DeploymentStatus, String>
+    public suspend fun deploymentStatus(credentials: Credentials, deploymentId: UUID): HttpResponseResult<DeploymentStatus, String>
 
-    public fun publishDeployment(credentials: Credentials, deploymentId: UUID): HttpResponseResult<Unit, String>
+    public suspend fun publishDeployment(credentials: Credentials, deploymentId: UUID): HttpResponseResult<Unit, String>
 
-    public fun dropDeployment(credentials: Credentials, deploymentId: UUID): HttpResponseResult<Unit, String>
+    public suspend fun dropDeployment(credentials: Credentials, deploymentId: UUID): HttpResponseResult<Unit, String>
 
 }

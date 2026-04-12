@@ -4,17 +4,18 @@ import io.github.zenhelix.gradle.plugin.client.MavenCentralApiClient
 import io.github.zenhelix.gradle.plugin.client.model.Credentials
 import io.github.zenhelix.gradle.plugin.client.model.HttpResponseResult
 import java.util.UUID
+import kotlin.coroutines.cancellation.CancellationException
 import org.gradle.api.logging.Logger
 
 /**
  * Best-effort attempt to drop a single deployment. Logs warnings on failure
- * but never throws (except for [InterruptedException] which restores the interrupt flag).
+ * but never throws (except for [CancellationException] which propagates for coroutine cancellation).
  *
  * HTTP 400 with a state-related message is treated as a normal race condition:
  * the deployment may have transitioned to PUBLISHING/PUBLISHED between our last
  * status check and the drop attempt. This is logged at lifecycle level, not as a warning.
  */
-internal fun MavenCentralApiClient.tryDropDeployment(
+internal suspend fun MavenCentralApiClient.tryDropDeployment(
     creds: Credentials, deploymentId: UUID, logger: Logger
 ) {
     try {
@@ -36,9 +37,8 @@ internal fun MavenCentralApiClient.tryDropDeployment(
                 logger.warn("Failed to drop deployment {}: {}", deploymentId, result.cause.message)
             }
         }
-    } catch (e: InterruptedException) {
-        Thread.currentThread().interrupt()
-        logger.warn("Interrupted while dropping deployment {}", deploymentId)
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         logger.warn("Failed to drop deployment {}: {}", deploymentId, e.message)
     }

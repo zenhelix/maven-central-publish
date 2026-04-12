@@ -14,11 +14,11 @@ import java.util.UUID
  */
 internal class NoOpMavenCentralApiClient : MavenCentralApiClient {
 
-    override fun uploadDeploymentBundle(
+    override suspend fun uploadDeploymentBundle(
         credentials: Credentials, bundle: Path, publishingType: PublishingType?, deploymentName: String?
     ): HttpResponseResult<UUID, String> = HttpResponseResult.Success(UUID.randomUUID())
 
-    override fun deploymentStatus(
+    override suspend fun deploymentStatus(
         credentials: Credentials, deploymentId: UUID
     ): HttpResponseResult<DeploymentStatus, String> = HttpResponseResult.Success(
         DeploymentStatus(
@@ -29,11 +29,11 @@ internal class NoOpMavenCentralApiClient : MavenCentralApiClient {
         )
     )
 
-    override fun publishDeployment(
+    override suspend fun publishDeployment(
         credentials: Credentials, deploymentId: UUID
     ): HttpResponseResult<Unit, String> = HttpResponseResult.Success(Unit)
 
-    override fun dropDeployment(
+    override suspend fun dropDeployment(
         credentials: Credentials, deploymentId: UUID
     ): HttpResponseResult<Unit, String> = HttpResponseResult.Success(Unit)
 

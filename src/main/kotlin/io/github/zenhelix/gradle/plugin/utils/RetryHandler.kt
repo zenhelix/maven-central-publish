@@ -4,6 +4,7 @@ import io.github.zenhelix.gradle.plugin.client.model.Failure
 import io.github.zenhelix.gradle.plugin.client.model.Outcome
 import io.github.zenhelix.gradle.plugin.client.model.Success
 import java.time.Duration
+import kotlinx.coroutines.delay
 import org.gradle.api.logging.Logger
 
 public class RetryHandler(
@@ -18,8 +19,8 @@ public class RetryHandler(
         }
     }
 
-    public fun <T> executeWithRetry(
-        operation: (attempt: Int) -> Outcome<T, Exception>,
+    public suspend fun <T> executeWithRetry(
+        operation: suspend (attempt: Int) -> Outcome<T, Exception>,
         shouldRetry: (Exception) -> Boolean = { true },
         onRetry: ((attempt: Int, exception: Exception) -> Unit)? = null
     ): Outcome<T, Exception> {
@@ -49,14 +50,9 @@ public class RetryHandler(
                     val delayMillis = calculateBackoffDelay(attempt)
                     logger.debug("Retrying after {}ms (attempt {}/{}): {}", delayMillis, attempt, maxRetries, result.error.message)
 
-                    try {
-                        Thread.sleep(delayMillis)
-                    } catch (e: InterruptedException) {
-                        Thread.currentThread().interrupt()
-                        throw e
-                    }
+                    delay(delayMillis)
                 }
-                else -> return result // required: HttpResponseResult also implements Outcome
+                else -> return result
             }
 
             attempt++
@@ -75,9 +71,3 @@ public class RetryHandler(
         internal const val MAX_BACKOFF_DELAY_MILLIS = 5 * 60 * 1000L
     }
 }
-
-public fun retryHandler(
-    maxRetries: Int = 3,
-    baseDelay: Duration = Duration.ofSeconds(2),
-    logger: Logger
-): RetryHandler = RetryHandler(maxRetries, baseDelay, logger)

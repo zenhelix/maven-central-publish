@@ -13,10 +13,13 @@ import io.github.zenhelix.gradle.plugin.client.model.Outcome
 import io.github.zenhelix.gradle.plugin.client.model.Success
 import io.github.zenhelix.gradle.plugin.client.model.ValidationError
 import io.github.zenhelix.gradle.plugin.client.model.isDroppable
+import io.github.zenhelix.gradle.plugin.client.model.getOrThrow
 import io.github.zenhelix.gradle.plugin.client.model.toGradleException
 import java.io.File
 import java.time.Duration
 import java.util.UUID
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
 import org.gradle.api.DefaultTask
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.Property
@@ -68,22 +71,19 @@ public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
     }
 
     @TaskAction
-    public fun publishBundles() {
-        validateInputs().fold(
-            onSuccess = {},
-            onFailure = { throw it.toGradleException() }
-        )
+    public fun publishBundles(): Unit = runBlocking {
+        doPublishBundles()
+    }
 
-        val creds = credentials.get().fold(
-            onSuccess = { it },
-            onFailure = { throw it.toGradleException() }
-        )
+    private suspend fun doPublishBundles() {
+        validateInputs().getOrThrow { it.toGradleException() }
+        val creds = credentials.get().getOrThrow { it.toGradleException() }
 
         val error = executePublishing(creds)
         error?.let { throw it.toGradleException() }
     }
 
-    private fun executePublishing(creds: Credentials): DeploymentError? {
+    private suspend fun executePublishing(creds: Credentials): DeploymentError? {
         val bundlesDir = bundlesDirectory.asFile.get()
         val bundleFiles = bundlesDir
             .listFiles { f -> f.extension == "zip" }
@@ -110,34 +110,36 @@ public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
             requestedType
         }
 
-        return createApiClient(baseUrl.get()).use { client ->
+        val client = createApiClient(baseUrl.get())
+        return try {
             val recoveryHandler = DeploymentRecoveryHandler(client, creds, logger)
             val lastKnownStates = mutableMapOf<UUID, DeploymentStateType>()
 
             val uploadResult = uploadAllBundles(client, creds, bundleFiles, effectiveType, baseName)
-            val deploymentIds = uploadResult.getOrNull() ?: return@use uploadResult.errorOrNull()
+            val deploymentIds = uploadResult.getOrNull() ?: return uploadResult.errorOrNull()
 
-            val validationError = waitForAllDeploymentsValidated(
+            val validationResult = waitForAllDeploymentsValidated(
                 client, creds, deploymentIds, effectiveType, maxChecks, checkDelay, lastKnownStates
-            ).fold(
-                onSuccess = { null },
-                onFailure = { recoveryHandler.recoverAll(deploymentIds, lastKnownStates, it) }
             )
-            if (validationError != null) return@use validationError
+            val validationError = validationResult.errorOrNull()
+                ?.let { recoveryHandler.recoverAll(deploymentIds, lastKnownStates, it) }
+            if (validationError != null) return validationError
 
             if (effectiveType != requestedType) {
                 val publishError = publishAllDeployments(client, creds, deploymentIds, recoveryHandler).fold(
                     onSuccess = { null },
                     onFailure = { it }
                 )
-                if (publishError != null) return@use publishError
+                if (publishError != null) return publishError
             }
 
             null
+        } finally {
+            client.close()
         }
     }
 
-    private fun uploadAllBundles(
+    private suspend fun uploadAllBundles(
         client: MavenCentralApiClient,
         creds: Credentials,
         bundleFiles: List<File>,
@@ -196,7 +198,7 @@ public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
         return Success(deploymentIds)
     }
 
-    private fun waitForAllDeploymentsValidated(
+    private suspend fun waitForAllDeploymentsValidated(
         client: MavenCentralApiClient,
         creds: Credentials,
         deploymentIds: List<UUID>,
@@ -259,12 +261,7 @@ public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
             }
 
             if (checkNumber < maxChecks) {
-                try {
-                    Thread.sleep(checkDelay.toMillis())
-                } catch (e: InterruptedException) {
-                    Thread.currentThread().interrupt()
-                    throw e
-                }
+                delay(checkDelay.toMillis())
             }
         }
 
@@ -276,7 +273,7 @@ public abstract class PublishSplitBundleMavenCentralTask : DefaultTask() {
         )
     }
 
-    private fun publishAllDeployments(
+    private suspend fun publishAllDeployments(
         client: MavenCentralApiClient,
         creds: Credentials,
         deploymentIds: List<UUID>,

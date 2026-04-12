@@ -13,7 +13,7 @@ internal class DeploymentRecoveryHandler(
     private val credentials: Credentials,
     private val logger: Logger
 ) {
-    fun recover(deploymentId: UUID, error: DeploymentError): DeploymentError {
+    suspend fun recover(deploymentId: UUID, error: DeploymentError): DeploymentError {
         if (error.isDroppable) {
             logger.warn("Deployment failed, attempting to drop deployment {}", deploymentId)
             client.tryDropDeployment(credentials, deploymentId, logger)
@@ -26,7 +26,7 @@ internal class DeploymentRecoveryHandler(
         return error
     }
 
-    fun recoverAll(
+    suspend fun recoverAll(
         deploymentIds: List<UUID>,
         lastKnownStates: Map<UUID, DeploymentStateType>,
         error: DeploymentError
@@ -47,7 +47,7 @@ internal class DeploymentRecoveryHandler(
         return error
     }
 
-    fun recoverPublishFailure(
+    suspend fun recoverPublishFailure(
         allIds: List<UUID>,
         publishedIds: Set<UUID>,
         failedId: UUID,

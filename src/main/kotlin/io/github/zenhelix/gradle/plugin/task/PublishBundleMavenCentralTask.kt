@@ -5,15 +5,19 @@ import io.github.zenhelix.gradle.plugin.client.MavenCentralApiClient
 import io.github.zenhelix.gradle.plugin.client.createApiClient as createDefaultApiClient
 import io.github.zenhelix.gradle.plugin.client.model.Credentials
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentError
+import io.github.zenhelix.gradle.plugin.client.model.HttpResponseResult
 import io.github.zenhelix.gradle.plugin.client.model.DeploymentStateType
 import io.github.zenhelix.gradle.plugin.client.model.Failure
 import io.github.zenhelix.gradle.plugin.client.model.PublishingType
 import io.github.zenhelix.gradle.plugin.client.model.Outcome
 import io.github.zenhelix.gradle.plugin.client.model.Success
 import io.github.zenhelix.gradle.plugin.client.model.ValidationError
+import io.github.zenhelix.gradle.plugin.client.model.getOrThrow
 import io.github.zenhelix.gradle.plugin.client.model.toGradleException
 import java.time.Duration
 import java.util.UUID
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
 import org.gradle.api.DefaultTask
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.model.ObjectFactory
@@ -69,22 +73,19 @@ public abstract class PublishBundleMavenCentralTask @Inject constructor(
     }
 
     @TaskAction
-    public fun publishBundle() {
-        validateInputs().fold(
-            onSuccess = {},
-            onFailure = { throw it.toGradleException() }
-        )
+    public fun publishBundle(): Unit = runBlocking {
+        doPublishBundle()
+    }
 
-        val creds = credentials.get().fold(
-            onSuccess = { it },
-            onFailure = { throw it.toGradleException() }
-        )
+    private suspend fun doPublishBundle() {
+        validateInputs().getOrThrow { it.toGradleException() }
+        val creds = credentials.get().getOrThrow { it.toGradleException() }
 
         val error = executePublishing(creds)
         error?.let { throw it.toGradleException() }
     }
 
-    private fun executePublishing(creds: Credentials): DeploymentError? {
+    private suspend fun executePublishing(creds: Credentials): DeploymentError? {
         val bundleFile = zipFile.asFile.get()
         val type = publishingType.orNull
         val name = deploymentName.orNull
@@ -93,26 +94,26 @@ public abstract class PublishBundleMavenCentralTask @Inject constructor(
 
         logger.lifecycle("Publishing deployment bundle: ${bundleFile.name}. Publishing type: ${type ?: PublishingType.AUTOMATIC}. Deployment name: $name")
 
-        return createApiClient(baseUrl.get()).use { apiClient ->
+        val apiClient = createApiClient(baseUrl.get())
+        return try {
             val recoveryHandler = DeploymentRecoveryHandler(apiClient, creds, logger)
 
-            apiClient.uploadDeploymentBundle(
+            val uploadResult = apiClient.uploadDeploymentBundle(
                 credentials = creds, bundle = bundleFile.toPath(), publishingType = type, deploymentName = name
-            ).foldHttp(
-                onSuccess = { deploymentId, _, _ ->
-                    val waitResult = waitForDeploymentCompletion(apiClient, creds, deploymentId, type, maxChecks, checkDelay)
-                    waitResult.fold(
-                        onSuccess = { null },
-                        onFailure = { error -> recoveryHandler.recover(deploymentId, error) }
-                    )
-                },
-                onError = { data, _, httpStatus, _ ->
-                    DeploymentError.UploadFailed(httpStatus, data)
-                },
-                onUnexpected = { cause, _, _ ->
-                    DeploymentError.UploadUnexpected(cause)
-                }
             )
+
+            when (uploadResult) {
+                is HttpResponseResult.Success -> {
+                    val deploymentId = uploadResult.data
+                    val waitResult = waitForDeploymentCompletion(apiClient, creds, deploymentId, type, maxChecks, checkDelay)
+                    val waitError = waitResult.errorOrNull()
+                    if (waitError != null) recoveryHandler.recover(deploymentId, waitError) else null
+                }
+                is HttpResponseResult.Error -> DeploymentError.UploadFailed(uploadResult.httpStatus, uploadResult.data)
+                is HttpResponseResult.UnexpectedError -> DeploymentError.UploadUnexpected(uploadResult.cause)
+            }
+        } finally {
+            apiClient.close()
         }
     }
 
@@ -131,7 +132,7 @@ public abstract class PublishBundleMavenCentralTask @Inject constructor(
         return Success(Unit)
     }
 
-    private fun waitForDeploymentCompletion(
+    private suspend fun waitForDeploymentCompletion(
         client: MavenCentralApiClient,
         creds: Credentials,
         deploymentId: UUID,
@@ -175,14 +176,7 @@ public abstract class PublishBundleMavenCentralTask @Inject constructor(
             when (stepResult) {
                 is DeploymentPollStep.Done -> return Success(Unit)
                 is DeploymentPollStep.Terminal -> return Failure(stepResult.error)
-                is DeploymentPollStep.Continue -> {
-                    try {
-                        Thread.sleep(checkDelay.toMillis())
-                    } catch (e: InterruptedException) {
-                        Thread.currentThread().interrupt()
-                        throw e
-                    }
-                }
+                is DeploymentPollStep.Continue -> delay(checkDelay.toMillis())
             }
         }
 

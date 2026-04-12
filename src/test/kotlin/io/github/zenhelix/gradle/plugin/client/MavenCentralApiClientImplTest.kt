@@ -17,6 +17,7 @@ import java.net.http.HttpResponse.BodyHandler
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
+import kotlinx.coroutines.test.runTest
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.AfterEach
@@ -48,7 +49,7 @@ class MavenCentralApiClientImplTest {
     }
 
     @Test
-    fun `uploadDeploymentBundle should successfully upload bundle and return deployment ID`() {
+    fun `uploadDeploymentBundle should successfully upload bundle and return deployment ID`() = runTest {
         val expectedDeploymentId = UUID.fromString("12345678-1234-1234-1234-123456789012")
 
         every {
@@ -75,7 +76,7 @@ class MavenCentralApiClientImplTest {
     }
 
     @Test
-    fun `uploadDeploymentBundle should include authorization header`() {
+    fun `uploadDeploymentBundle should include authorization header`() = runTest {
         val capturedRequest = slot<HttpRequest>()
 
         every {
@@ -97,19 +98,22 @@ class MavenCentralApiClientImplTest {
     }
 
     @Test
-    fun `uploadDeploymentBundle should throw exception when bundle file does not exist`() {
+    fun `uploadDeploymentBundle should throw exception when bundle file does not exist`() = runTest {
         val nonExistentFile = tempDir.resolve("non-existent.zip")
 
-        assertThatThrownBy {
+        try {
             client.uploadDeploymentBundle(
                 credentials = BearerTokenCredentials(token = "test-token-123"),
                 bundle = nonExistentFile
             )
-        }.isInstanceOf(IllegalArgumentException::class.java).hasMessageContaining("Bundle file does not exist")
+            org.junit.jupiter.api.Assertions.fail("Expected IllegalArgumentException")
+        } catch (e: IllegalArgumentException) {
+            assertThat(e.message).contains("Bundle file does not exist")
+        }
     }
 
     @Test
-    fun `deploymentStatus should successfully retrieve deployment status`() {
+    fun `deploymentStatus should successfully retrieve deployment status`() = runTest {
         every {
             mockHttpClient.send(any<HttpRequest>(), any<BodyHandler<String>>())
         } returns mockk<HttpResponse<String>> {
@@ -140,7 +144,7 @@ class MavenCentralApiClientImplTest {
     }
 
     @Test
-    fun `deploymentStatus should return error when status is not 200`() {
+    fun `deploymentStatus should return error when status is not 200`() = runTest {
         val errorMessage = "Deployment not found"
 
         every {
@@ -163,7 +167,7 @@ class MavenCentralApiClientImplTest {
     }
 
     @Test
-    fun `publishDeployment should successfully publish deployment`() {
+    fun `publishDeployment should successfully publish deployment`() = runTest {
         every {
             mockHttpClient.send(any<HttpRequest>(), any<BodyHandler<String>>())
         } returns mockk<HttpResponse<String>> {
@@ -182,7 +186,7 @@ class MavenCentralApiClientImplTest {
     }
 
     @Test
-    fun `publishDeployment should use POST method`() {
+    fun `publishDeployment should use POST method`() = runTest {
         val capturedRequest = slot<HttpRequest>()
 
         every {
@@ -205,7 +209,7 @@ class MavenCentralApiClientImplTest {
     }
 
     @Test
-    fun `dropDeployment should successfully drop deployment`() {
+    fun `dropDeployment should successfully drop deployment`() = runTest {
         every {
             mockHttpClient.send(any<HttpRequest>(), any<BodyHandler<String>>())
         } returns mockk<HttpResponse<String>> {
@@ -224,7 +228,7 @@ class MavenCentralApiClientImplTest {
     }
 
     @Test
-    fun `uploadDeploymentBundle should retry on HTTP 429`() {
+    fun `uploadDeploymentBundle should retry on HTTP 429`() = runTest {
         val expectedDeploymentId = UUID.fromString("12345678-1234-1234-1234-123456789012")
         var callCount = 0
 
@@ -258,7 +262,7 @@ class MavenCentralApiClientImplTest {
     }
 
     @Test
-    fun `uploadDeploymentBundle should escape special characters in filename`() {
+    fun `uploadDeploymentBundle should escape special characters in filename`() = runTest {
         val capturedRequest = slot<HttpRequest>()
         val bundleFile = tempDir.resolve("test\"bundle.zip").also {
             Files.write(it, "test content".toByteArray())
@@ -281,7 +285,7 @@ class MavenCentralApiClientImplTest {
     }
 
     @Test
-    fun `dropDeployment should use DELETE method`() {
+    fun `dropDeployment should use DELETE method`() = runTest {
         val capturedRequest = slot<HttpRequest>()
 
         every {
@@ -304,7 +308,7 @@ class MavenCentralApiClientImplTest {
     }
 
     @Test
-    fun `uploadDeploymentBundle should retry on HTTP 500`() {
+    fun `uploadDeploymentBundle should retry on HTTP 500`() = runTest {
         val expectedDeploymentId = UUID.fromString("12345678-1234-1234-1234-123456789012")
         var callCount = 0
 
@@ -338,7 +342,7 @@ class MavenCentralApiClientImplTest {
     }
 
     @Test
-    fun `uploadDeploymentBundle should return UnexpectedError on timeout`() {
+    fun `uploadDeploymentBundle should return UnexpectedError on timeout`() = runTest {
         every {
             mockHttpClient.send(any<HttpRequest>(), any<BodyHandler<String>>())
         } throws java.net.http.HttpTimeoutException("Connection timed out")
@@ -354,7 +358,7 @@ class MavenCentralApiClientImplTest {
     }
 
     @Test
-    fun `deploymentStatus should handle invalid JSON gracefully`() {
+    fun `deploymentStatus should handle invalid JSON gracefully`() = runTest {
         every {
             mockHttpClient.send(any<HttpRequest>(), any<BodyHandler<String>>())
         } returns mockk<HttpResponse<String>> {
@@ -373,7 +377,7 @@ class MavenCentralApiClientImplTest {
     }
 
     @Test
-    fun `uploadDeploymentBundle should return UnexpectedError after all retries exhausted`() {
+    fun `uploadDeploymentBundle should return UnexpectedError after all retries exhausted`() = runTest {
         every {
             mockHttpClient.send(any<HttpRequest>(), any<BodyHandler<String>>())
         } throws java.net.ConnectException("Connection refused")

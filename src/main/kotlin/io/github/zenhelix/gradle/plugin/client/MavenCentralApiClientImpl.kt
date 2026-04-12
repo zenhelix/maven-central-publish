@@ -19,7 +19,6 @@ import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpRequest.BodyPublishers
 import java.net.http.HttpRequest.BodyPublishers.noBody
-import java.net.http.HttpRequest.newBuilder
 import java.net.http.HttpResponse
 import java.net.http.HttpResponse.BodyHandlers
 import java.net.http.HttpTimeoutException
@@ -28,6 +27,8 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
 import java.util.UUID
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.gradle.api.logging.Logger
 import org.gradle.api.logging.Logging
 
@@ -51,7 +52,7 @@ public class MavenCentralApiClientImpl(
     /**
      * [Uploading a Deployment Bundle](https://central.sonatype.org/publish/publish-portal-api/#uploading-a-deployment-bundle)
      */
-    override fun uploadDeploymentBundle(
+    override suspend fun uploadDeploymentBundle(
         credentials: Credentials, bundle: Path, publishingType: PublishingType?, deploymentName: String?
     ): HttpResponseResult<UUID, String> {
         require(Files.exists(bundle)) { "Bundle file does not exist: $bundle" }
@@ -63,143 +64,75 @@ public class MavenCentralApiClientImpl(
             "publishingType" to publishingType?.id
         )
 
-        val uri = URI("$baseUrl/api/v1/publisher/upload$query")
         val boundary = UUID.randomUUID().toString().replace("-", "")
 
-        val request = newBuilder(uri)
-            .timeout(requestTimeout)
-            .header("Authorization", "Bearer ${credentials.bearerToken}")
-            .header("Content-Type", "multipart/form-data; boundary=$boundary")
-            .POST(filePart(BUNDLE_FILE_PART_NAME, boundary, bundle))
-            .build()
+        return apiCall("uploadDeploymentBundle") {
+            uri = URI("$baseUrl/api/v1/publisher/upload$query")
+            authorize(credentials)
+            post(filePart(BUNDLE_FILE_PART_NAME, boundary, bundle))
+            header("Content-Type", "multipart/form-data; boundary=$boundary")
 
-        logger.debug("Sending upload request to: {}", uri)
-
-        return executeRequestWithRetry(request, "uploadDeploymentBundle") { response, body ->
-            if (response.statusCode() == HTTP_CREATED) {
-                val deploymentId = UUID.fromString(body)
-                logger.debug("Bundle uploaded successfully. DeploymentId: {}", deploymentId)
-                HttpResponseResult.Success(
-                    data = deploymentId,
-                    httpStatus = response.statusCode(),
-                    httpHeaders = response.headers().map()
-                )
-            } else {
-                logger.warn("Failed to upload bundle. Status: {}, Response: {}", response.statusCode(), body)
-                HttpResponseResult.Error(
-                    data = body,
-                    httpStatus = response.statusCode(),
-                    httpHeaders = response.headers().map()
-                )
-            }
+            expectStatus(HTTP_CREATED)
+            parseSuccess { body -> UUID.fromString(body) }
+            onSuccessLog { data -> "Bundle uploaded successfully. DeploymentId: $data" }
+            onErrorLog { status, body -> "Failed to upload bundle. Status: $status, Response: $body" }
         }
     }
 
-    override fun deploymentStatus(
+    override suspend fun deploymentStatus(
         credentials: Credentials, deploymentId: UUID
     ): HttpResponseResult<DeploymentStatus, String> {
-        val uri = URI("$baseUrl/api/v1/publisher/status?id=${urlEncode(deploymentId.toString())}")
-        val request = newBuilder(uri)
-            .timeout(requestTimeout)
-            .header("Authorization", "Bearer ${credentials.bearerToken}")
-            .POST(noBody())
-            .build()
+        return apiCall("deploymentStatus") {
+            uri = URI("$baseUrl/api/v1/publisher/status?id=${urlEncode(deploymentId.toString())}")
+            authorize(credentials)
+            post()
 
-        logger.debug("Sending status request to: {}", uri)
-
-        return executeRequestWithRetry(request, "deploymentStatus") { response, body ->
-            if (response.statusCode() == HTTP_OK) {
+            expectStatus(HTTP_OK)
+            parseSuccess { body ->
                 val status = parseDeploymentStatus(body)
                 if (status != null) {
                     logger.debug(
                         "Deployment status retrieved: deploymentId={}, state={}",
                         status.deploymentId, status.deploymentState
                     )
-                    HttpResponseResult.Success(
-                        data = status,
-                        httpStatus = response.statusCode(),
-                        httpHeaders = response.headers().map()
-                    )
+                    status
                 } else {
-                    logger.warn("Failed to parse deployment status. Response: {}", body)
-                    HttpResponseResult.Error(
-                        data = body,
-                        httpStatus = response.statusCode(),
-                        httpHeaders = response.headers().map()
-                    )
+                    null
                 }
-            } else {
-                logger.warn("Failed to fetch deployment status. Status: {}, Response: {}", response.statusCode(), body)
-                HttpResponseResult.Error(
-                    data = body,
-                    httpStatus = response.statusCode(),
-                    httpHeaders = response.headers().map()
-                )
             }
+            onErrorLog { status, body -> "Failed to fetch deployment status. Status: $status, Response: $body" }
         }
     }
 
     /**
      * [Publish the Deployment](https://central.sonatype.org/publish/publish-portal-api/#publish-or-drop-the-deployment)
      */
-    override fun publishDeployment(credentials: Credentials, deploymentId: UUID): HttpResponseResult<Unit, String> {
-        val uri = URI("$baseUrl/api/v1/publisher/deployment/${urlEncode(deploymentId.toString())}")
-        val request = newBuilder(uri)
-            .timeout(requestTimeout)
-            .header("Authorization", "Bearer ${credentials.bearerToken}")
-            .POST(noBody())
-            .build()
+    override suspend fun publishDeployment(credentials: Credentials, deploymentId: UUID): HttpResponseResult<Unit, String> {
+        return apiCall("publishDeployment") {
+            uri = URI("$baseUrl/api/v1/publisher/deployment/${urlEncode(deploymentId.toString())}")
+            authorize(credentials)
+            post()
 
-        logger.debug("Sending publish request to: {}", uri)
-
-        return executeRequestWithRetry(request, "publishDeployment") { response, body ->
-            if (response.statusCode() == HTTP_NO_CONTENT) {
-                logger.debug("Deployment published successfully: {}", deploymentId)
-                HttpResponseResult.Success(
-                    data = Unit,
-                    httpStatus = response.statusCode(),
-                    httpHeaders = response.headers().map()
-                )
-            } else {
-                logger.warn("Failed to publish deployment. Status: {}, Response: {}", response.statusCode(), body)
-                HttpResponseResult.Error(
-                    data = body,
-                    httpStatus = response.statusCode(),
-                    httpHeaders = response.headers().map()
-                )
-            }
+            expectStatus(HTTP_NO_CONTENT)
+            parseSuccess { Unit }
+            onSuccessLog { "Deployment published successfully: $deploymentId" }
+            onErrorLog { status, body -> "Failed to publish deployment. Status: $status, Response: $body" }
         }
     }
 
     /**
      * [Drop the Deployment](https://central.sonatype.org/publish/publish-portal-api/#publish-or-drop-the-deployment)
      */
-    override fun dropDeployment(credentials: Credentials, deploymentId: UUID): HttpResponseResult<Unit, String> {
-        val uri = URI("$baseUrl/api/v1/publisher/deployment/${urlEncode(deploymentId.toString())}")
-        val request = newBuilder(uri)
-            .timeout(requestTimeout)
-            .header("Authorization", "Bearer ${credentials.bearerToken}")
-            .DELETE()
-            .build()
+    override suspend fun dropDeployment(credentials: Credentials, deploymentId: UUID): HttpResponseResult<Unit, String> {
+        return apiCall("dropDeployment") {
+            uri = URI("$baseUrl/api/v1/publisher/deployment/${urlEncode(deploymentId.toString())}")
+            authorize(credentials)
+            delete()
 
-        logger.debug("Sending drop request to: {}", uri)
-
-        return executeRequestWithRetry(request, "dropDeployment") { response, body ->
-            if (response.statusCode() == HTTP_NO_CONTENT) {
-                logger.debug("Deployment dropped successfully: {}", deploymentId)
-                HttpResponseResult.Success(
-                    data = Unit,
-                    httpStatus = response.statusCode(),
-                    httpHeaders = response.headers().map()
-                )
-            } else {
-                logger.warn("Failed to drop deployment. Status: {}, Response: {}", response.statusCode(), body)
-                HttpResponseResult.Error(
-                    data = body,
-                    httpStatus = response.statusCode(),
-                    httpHeaders = response.headers().map()
-                )
-            }
+            expectStatus(HTTP_NO_CONTENT)
+            parseSuccess { Unit }
+            onSuccessLog { "Deployment dropped successfully: $deploymentId" }
+            onErrorLog { status, body -> "Failed to drop deployment. Status: $status, Response: $body" }
         }
     }
 
@@ -223,7 +156,106 @@ public class MavenCentralApiClientImpl(
         }
     }
 
-    private fun <T : Any> executeRequestWithRetry(
+    // ── DSL Builder ─────────────────────────────────────────────────────
+
+    private inner class ApiCallBuilder<T : Any> {
+        lateinit var uri: URI
+        private var method: String = "POST"
+        private var body: HttpRequest.BodyPublisher = noBody()
+        private val headers: MutableMap<String, String> = mutableMapOf()
+
+        var expectedSuccessStatus: Int = HTTP_OK
+        lateinit var successParser: (String) -> T?
+        var successLogMessage: ((T) -> String)? = null
+        var errorLogMessage: ((Int, String) -> String)? = null
+
+        fun authorize(credentials: Credentials) {
+            headers["Authorization"] = "Bearer ${credentials.bearerToken}"
+        }
+
+        fun post(bodyPublisher: HttpRequest.BodyPublisher = noBody()) {
+            method = "POST"
+            body = bodyPublisher
+        }
+
+        fun delete() {
+            method = "DELETE"
+        }
+
+        fun header(name: String, value: String) {
+            headers[name] = value
+        }
+
+        fun expectStatus(status: Int) {
+            expectedSuccessStatus = status
+        }
+
+        fun parseSuccess(parser: (String) -> T?) {
+            successParser = parser
+        }
+
+        fun onSuccessLog(message: (T) -> String) {
+            successLogMessage = message
+        }
+
+        fun onErrorLog(message: (Int, String) -> String) {
+            errorLogMessage = message
+        }
+
+        fun buildRequest(): HttpRequest {
+            val builder = HttpRequest.newBuilder(uri)
+                .timeout(requestTimeout)
+
+            headers.forEach { (name, value) -> builder.header(name, value) }
+
+            when (method) {
+                "DELETE" -> builder.DELETE()
+                else -> builder.POST(body)
+            }
+
+            return builder.build()
+        }
+    }
+
+    private suspend fun <T : Any> apiCall(
+        operationName: String,
+        configure: ApiCallBuilder<T>.() -> Unit
+    ): HttpResponseResult<T, String> {
+        val builder = ApiCallBuilder<T>().apply(configure)
+        val request = builder.buildRequest()
+
+        logger.debug("Sending {} request to: {}", operationName, builder.uri)
+
+        return executeRequestWithRetry(request, operationName) { response, body ->
+            if (response.statusCode() == builder.expectedSuccessStatus) {
+                val parsed = builder.successParser(body)
+                if (parsed != null) {
+                    builder.successLogMessage?.let { logger.debug(it(parsed)) }
+                    HttpResponseResult.Success(
+                        data = parsed,
+                        httpStatus = response.statusCode(),
+                        httpHeaders = response.headers().map()
+                    )
+                } else {
+                    builder.errorLogMessage?.let { logger.warn(it(response.statusCode(), body)) }
+                    HttpResponseResult.Error(
+                        data = body,
+                        httpStatus = response.statusCode(),
+                        httpHeaders = response.headers().map()
+                    )
+                }
+            } else {
+                builder.errorLogMessage?.let { logger.warn(it(response.statusCode(), body)) }
+                HttpResponseResult.Error(
+                    data = body,
+                    httpStatus = response.statusCode(),
+                    httpHeaders = response.headers().map()
+                )
+            }
+        }
+    }
+
+    private suspend fun <T : Any> executeRequestWithRetry(
         request: HttpRequest,
         operationName: String,
         responseHandler: (HttpResponse<String>, String) -> HttpResponseResult<T, String>
@@ -232,7 +264,9 @@ public class MavenCentralApiClientImpl(
             operation = { attempt ->
                 try {
                     val startTime = System.currentTimeMillis()
-                    val response = httpClient.send(request, BodyHandlers.ofString(UTF_8))
+                    val response = withContext(Dispatchers.IO) {
+                        httpClient.send(request, BodyHandlers.ofString(UTF_8))
+                    }
                     val duration = System.currentTimeMillis() - startTime
 
                     logger.debug(
