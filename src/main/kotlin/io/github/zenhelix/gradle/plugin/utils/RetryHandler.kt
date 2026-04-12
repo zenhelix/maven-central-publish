@@ -7,7 +7,7 @@ import java.time.Duration
 import kotlinx.coroutines.delay
 import org.gradle.api.logging.Logger
 
-public class RetryHandler(
+internal class RetryHandler(
     private val maxRetries: Int,
     private val baseDelay: Duration,
     private val logger: Logger
@@ -19,21 +19,20 @@ public class RetryHandler(
         }
     }
 
-    public suspend fun <T> executeWithRetry(
+    suspend fun <T> executeWithRetry(
         operation: suspend (attempt: Int) -> Outcome<T, Exception>,
         shouldRetry: (Exception) -> Boolean = { true },
         onRetry: ((attempt: Int, exception: Exception) -> Unit)? = null
     ): Outcome<T, Exception> {
         var attempt = 1
-        var lastError: Exception? = null
 
         while (attempt <= maxRetries) {
-            val result = operation(attempt)
-
-            when (result) {
+            when (val result = operation(attempt)) {
                 is Success -> return result
                 is Failure -> {
-                    lastError = result.error
+                    if (result.error is kotlin.coroutines.cancellation.CancellationException) {
+                        throw result.error
+                    }
 
                     if (!shouldRetry(result.error)) {
                         logger.debug("Exception is not retriable, failing immediately: {}", result.error.message)
@@ -58,13 +57,20 @@ public class RetryHandler(
             attempt++
         }
 
-        return Failure(lastError ?: Exception("Operation failed after $maxRetries attempts"))
+        error("Unreachable: loop always returns on last attempt")
     }
 
     internal fun calculateBackoffDelay(attempt: Int): Long {
         val maxShift = 30
         val shift = (attempt - 1).coerceAtMost(maxShift)
-        return (baseDelay.toMillis() * (1L shl shift)).coerceAtMost(MAX_BACKOFF_DELAY_MILLIS)
+        val multiplier = 1L shl shift
+        val baseMs = baseDelay.toMillis()
+        // Overflow-safe: if multiplication would overflow Long, return max directly
+        return if (baseMs != 0L && multiplier > MAX_BACKOFF_DELAY_MILLIS / baseMs) {
+            MAX_BACKOFF_DELAY_MILLIS
+        } else {
+            (baseMs * multiplier).coerceAtMost(MAX_BACKOFF_DELAY_MILLIS)
+        }
     }
 
     internal companion object {

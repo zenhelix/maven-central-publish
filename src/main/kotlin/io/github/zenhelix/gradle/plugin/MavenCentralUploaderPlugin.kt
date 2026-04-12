@@ -1,5 +1,6 @@
 package io.github.zenhelix.gradle.plugin
 
+import io.github.zenhelix.gradle.plugin.configurator.JarConfigurator
 import io.github.zenhelix.gradle.plugin.configurator.RootProjectConfigurator
 import io.github.zenhelix.gradle.plugin.configurator.SubprojectConfigurator
 import io.github.zenhelix.gradle.plugin.configurator.ZipDeploymentConfigurator
@@ -40,6 +41,7 @@ public class MavenCentralUploaderPlugin : Plugin<Project> {
         )
 
         ZipDeploymentConfigurator.configure(target, extension)
+        JarConfigurator.configure(target, extension.autoConfigureJars)
 
         if (target == target.rootProject) {
             RootProjectConfigurator.configure(target, extension)

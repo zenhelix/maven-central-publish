@@ -15,7 +15,6 @@ import org.gradle.api.tasks.TaskDependency
 import org.gradle.api.tasks.TaskProvider
 import org.gradle.internal.extensions.stdlib.capitalized
 import org.gradle.kotlin.dsl.listProperty
-import org.gradle.kotlin.dsl.named
 
 internal object RootProjectConfigurator {
 
@@ -86,10 +85,15 @@ internal object RootProjectConfigurator {
             if (!rootPublications.isNullOrEmpty()) {
                 rootPublications.forEach { publication ->
                     val checksumTaskName = "checksum${publication.name.capitalized()}Publication"
-                    add(publication.mapModel(
-                        rootProject,
-                        rootProject.tasks.named<CreateChecksumTask>(checksumTaskName)
-                    ))
+                    val checksumTask = rootProject.tasks.findByName(checksumTaskName)
+                    if (checksumTask is CreateChecksumTask) {
+                        add(
+                            publication.mapModel(
+                                rootProject,
+                                rootProject.tasks.named(checksumTaskName, CreateChecksumTask::class.java)
+                            )
+                        )
+                    }
                 }
             }
 

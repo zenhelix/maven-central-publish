@@ -146,4 +146,29 @@ class OutcomeTest {
         val mapped = result.mapError { it.length }
         assertThat(mapped.getOrNull()).isEqualTo(42)
     }
+
+    @Test
+    fun `mapError transforms HttpResponseResult Error`() {
+        val result: Outcome<Int, String?> =
+            HttpResponseResult.Error(data = "error", httpStatus = HttpStatus.BAD_REQUEST)
+        val mapped = result.mapError { it?.length ?: -1 }
+        assertThat(mapped).isInstanceOf(Failure::class.java)
+        assertThat(mapped.errorOrNull()).isEqualTo(5)
+    }
+
+    @Test
+    fun `mapError preserves HttpResponseResult Success`() {
+        val result: Outcome<Int, String?> = HttpResponseResult.Success(data = 42, httpStatus = HttpStatus.OK)
+        val mapped = result.mapError { it?.length ?: -1 }
+        assertThat(mapped.getOrNull()).isEqualTo(42)
+    }
+
+    @Test
+    fun `mapError preserves HttpResponseResult UnexpectedError`() {
+        val cause = RuntimeException("boom")
+        val result: Outcome<Int, String?> = HttpResponseResult.UnexpectedError(cause = cause)
+        val mapped = result.mapError { it?.length ?: -1 }
+        assertThat(mapped.getOrNull()).isNull()
+        assertThat(mapped.errorOrNull()).isNull()
+    }
 }

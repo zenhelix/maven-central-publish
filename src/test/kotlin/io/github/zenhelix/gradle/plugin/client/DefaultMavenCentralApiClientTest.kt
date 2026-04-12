@@ -242,6 +242,15 @@ class DefaultMavenCentralApiClientTest {
             bundle = bundleFile
         )
 
+        // Verify the Content-Type header contains multipart boundary
+        val contentType = capturedRequest.captured.headers().firstValue("Content-Type").orElse("")
+        assertThat(contentType).startsWith("multipart/form-data; boundary=")
+
+        // Extract boundary and verify it's a valid UUID-derived string
+        val boundary = contentType.substringAfter("boundary=")
+        assertThat(boundary).isNotEmpty()
+        assertThat(boundary).matches("[0-9a-f]+")
+
         verify { mockHttpClient.send(any<HttpRequest>(), any<BodyHandler<String>>()) }
     }
 
@@ -335,6 +344,56 @@ class DefaultMavenCentralApiClientTest {
         assertThat(result).isInstanceOf(HttpResponseResult.UnexpectedError::class.java)
         assertThat((result as HttpResponseResult.UnexpectedError).cause)
             .isInstanceOf(java.net.ConnectException::class.java)
+    }
+
+    @Test
+    fun `uploadDeploymentBundle should return error when API returns invalid UUID`() = runTest {
+        every {
+            mockHttpClient.send(any<HttpRequest>(), any<BodyHandler<String>>())
+        } returns mockHttpResponse(201, "not-a-valid-uuid")
+
+        val result = client.uploadDeploymentBundle(
+            credentials = BearerTokenCredentials(token = "test-token-123"),
+            bundle = createTestBundleFile()
+        )
+
+        assertThat(result).isInstanceOf(HttpResponseResult.Error::class.java)
+    }
+
+    @Test
+    fun `deploymentStatus should return error when API response is missing required fields`() = runTest {
+        every {
+            mockHttpClient.send(any<HttpRequest>(), any<BodyHandler<String>>())
+        } returns mockHttpResponse(200, """{"deploymentState": "VALIDATED"}""".trimIndent())
+
+        val result = client.deploymentStatus(
+            credentials = BearerTokenCredentials(token = "test-token-123"),
+            deploymentId = DeploymentId.fromString("12345678-1234-1234-1234-123456789012")
+        )
+
+        assertThat(result).isInstanceOf(HttpResponseResult.Error::class.java)
+    }
+
+    @Test
+    fun `deploymentStatus should return error when API returns invalid deployment ID`() = runTest {
+        every {
+            mockHttpClient.send(any<HttpRequest>(), any<BodyHandler<String>>())
+        } returns mockHttpResponse(200, """
+            {
+                "deploymentId": "not-a-uuid",
+                "deploymentName": "test",
+                "deploymentState": "VALIDATED",
+                "purls": null,
+                "errors": null
+            }
+        """.trimIndent())
+
+        val result = client.deploymentStatus(
+            credentials = BearerTokenCredentials(token = "test-token-123"),
+            deploymentId = DeploymentId.fromString("12345678-1234-1234-1234-123456789012")
+        )
+
+        assertThat(result).isInstanceOf(HttpResponseResult.Error::class.java)
     }
 
 }

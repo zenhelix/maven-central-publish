@@ -77,6 +77,24 @@ class RetryHandlerTest {
     }
 
     @Test
+    fun `should propagate CancellationException immediately without retry`() = runTest {
+        val handler = RetryHandler(maxRetries = 3, baseDelay = Duration.ofMillis(10), logger = logger)
+        var attempts = 0
+
+        val result = runCatching {
+            handler.executeWithRetry<String>(
+                operation = { _ ->
+                    attempts++
+                    Failure(kotlinx.coroutines.CancellationException("Job was cancelled"))
+                }
+            )
+        }
+
+        assertThat(attempts).isEqualTo(1)
+        assertThat(result.exceptionOrNull()).isInstanceOf(kotlinx.coroutines.CancellationException::class.java)
+    }
+
+    @Test
     fun `should support cancellation during delay`() = runTest {
         val handler = RetryHandler(maxRetries = 3, baseDelay = Duration.ofSeconds(10), logger = logger)
         var attempt = 0

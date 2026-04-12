@@ -9,6 +9,30 @@ import org.gradle.kotlin.dsl.newInstance
 import org.gradle.kotlin.dsl.property
 import javax.inject.Inject
 
+/**
+ * Main configuration extension for the Maven Central publish plugin, registered as the
+ * `mavenCentralPortal { }` DSL block in your build script.
+ *
+ * Example usage:
+ * ```kotlin
+ * mavenCentralPortal {
+ *     baseUrl = "https://central.sonatype.com"
+ *     publishingType = PublishingMode.AUTOMATIC
+ *     credentials {
+ *         bearer { token = providers.environmentVariable("MAVEN_TOKEN") }
+ *     }
+ *     uploader {
+ *         maxStatusChecks = 30
+ *         statusCheckDelay = Duration.ofSeconds(15)
+ *         maxBundleSize = 512.megabytes
+ *     }
+ * }
+ * ```
+ *
+ * @see PublishingMode
+ * @see MavenCentralUploaderCredentialExtension
+ * @see UploaderSettingsExtension
+ */
 public open class MavenCentralUploaderExtension @Inject constructor(objects: ObjectFactory) {
 
     public val baseUrl: Property<String> = objects.property<String>().convention(DEFAULT_CENTRAL_MAVEN_PORTAL_BASE_URL)
@@ -28,6 +52,19 @@ public open class MavenCentralUploaderExtension @Inject constructor(objects: Obj
         configure.execute(uploader)
     }
 
+    public val pom: PomExtension = objects.newInstance<PomExtension>()
+    public fun pom(configure: Action<PomExtension>) {
+        configure.execute(pom)
+    }
+
+    /**
+     * When `true` (default), automatically registers `javadocJar` and `sourcesJar` tasks
+     * and attaches them to all Maven publications. Existing tasks with the same name are not overwritten.
+     *
+     * If the Dokka plugin is applied, its output is used for the javadoc jar content.
+     */
+    public val autoConfigureJars: Property<Boolean> = objects.property<Boolean>().convention(true)
+
     public companion object {
         public const val MAVEN_CENTRAL_UPLOADER_EXTENSION_NAME: String = "mavenCentralPortal"
 
@@ -35,6 +72,29 @@ public open class MavenCentralUploaderExtension @Inject constructor(objects: Obj
     }
 }
 
+/**
+ * Credential configuration for authenticating with the Maven Central Portal API.
+ *
+ * Exactly one credential mode must be configured — either [bearer] or [usernamePassword].
+ * Configuring both will result in a validation error at publish time.
+ *
+ * Bearer token example:
+ * ```kotlin
+ * credentials {
+ *     bearer { token = providers.environmentVariable("MAVEN_TOKEN") }
+ * }
+ * ```
+ *
+ * Username/password example:
+ * ```kotlin
+ * credentials {
+ *     usernamePassword {
+ *         username = providers.environmentVariable("MAVEN_USERNAME")
+ *         password = providers.environmentVariable("MAVEN_PASSWORD")
+ *     }
+ * }
+ * ```
+ */
 public open class MavenCentralUploaderCredentialExtension @Inject constructor(objects: ObjectFactory) {
 
     private sealed interface CredentialMode {
@@ -72,25 +132,74 @@ public open class MavenCentralUploaderCredentialExtension @Inject constructor(ob
     public val isUsernamePasswordConfigured: Boolean get() = mode == CredentialMode.UsernamePassword || mode == CredentialMode.Both
 }
 
+/**
+ * Bearer token credential for authenticating with the Maven Central Portal.
+ *
+ * Generate a token at https://central.sonatype.com/account (User Token section).
+ */
 public open class BearerCredentialExtension @Inject constructor(objects: ObjectFactory) {
     public val token: Property<String> = objects.property<String>()
 }
 
+/**
+ * Username/password credential for authenticating with the Maven Central Portal.
+ *
+ * The username and password are Base64-encoded at runtime to produce the HTTP Basic
+ * `Authorization` header value.
+ */
 public open class UsernamePasswordCredentialExtension @Inject constructor(objects: ObjectFactory) {
     public val username: Property<String> = objects.property<String>()
     public val password: Property<String> = objects.property<String>()
 }
 
+/**
+ * Fine-grained settings that control the upload and status-polling behaviour.
+ *
+ * Example:
+ * ```kotlin
+ * uploader {
+ *     maxStatusChecks = 30
+ *     statusCheckDelay = Duration.ofSeconds(15)
+ *     maxBundleSize = 512.megabytes   // or e.g. 1.gigabytes
+ *     requestTimeout = Duration.ofMinutes(10)
+ *     connectTimeout = Duration.ofSeconds(60)
+ *     maxRetries = 5
+ *     retryBaseDelay = Duration.ofSeconds(5)
+ * }
+ * ```
+ *
+ * @property maxStatusChecks Maximum number of deployment-status polls before the task fails
+ * with a timeout error. Default: 20.
+ * @property statusCheckDelay Delay between consecutive status polls. Default: 10 seconds.
+ * @property maxBundleSize Maximum size (in bytes) of a single upload bundle. When a bundle
+ * exceeds this limit it is automatically split into smaller chunks. Default: 256 MB.
+ * Use the [Int.megabytes] or [Int.gigabytes] extension properties for readable values.
+ * @property requestTimeout Timeout for individual HTTP requests to the Maven Central Portal API.
+ * Default: 5 minutes.
+ * @property connectTimeout Timeout for establishing an HTTP connection to the Maven Central Portal API.
+ * Default: 30 seconds.
+ * @property maxRetries Maximum number of retry attempts for retriable HTTP failures (e.g. 5xx,
+ * connection errors). Default: 3.
+ * @property retryBaseDelay Base delay between retry attempts. Default: 2 seconds.
+ */
 public open class UploaderSettingsExtension @Inject constructor(objects: ObjectFactory) {
 
     public val maxStatusChecks: Property<Int> = objects.property<Int>().convention(DEFAULT_MAX_STATUS_CHECKS)
     public val statusCheckDelay: Property<Duration> =
         objects.property<Duration>().convention(DEFAULT_STATUS_CHECK_DELAY)
     public val maxBundleSize: Property<Long> = objects.property<Long>().convention(DEFAULT_MAX_BUNDLE_SIZE)
+    public val requestTimeout: Property<Duration> = objects.property<Duration>().convention(DEFAULT_REQUEST_TIMEOUT)
+    public val connectTimeout: Property<Duration> = objects.property<Duration>().convention(DEFAULT_CONNECT_TIMEOUT)
+    public val maxRetries: Property<Int> = objects.property<Int>().convention(DEFAULT_MAX_RETRIES)
+    public val retryBaseDelay: Property<Duration> = objects.property<Duration>().convention(DEFAULT_RETRY_BASE_DELAY)
 
     public companion object {
         public const val DEFAULT_MAX_STATUS_CHECKS: Int = 20
         public val DEFAULT_STATUS_CHECK_DELAY: Duration = Duration.ofSeconds(10)
         public val DEFAULT_MAX_BUNDLE_SIZE: Long = 256.megabytes
+        public val DEFAULT_REQUEST_TIMEOUT: Duration = Duration.ofMinutes(5)
+        public val DEFAULT_CONNECT_TIMEOUT: Duration = Duration.ofSeconds(30)
+        public const val DEFAULT_MAX_RETRIES: Int = 3
+        public val DEFAULT_RETRY_BASE_DELAY: Duration = Duration.ofSeconds(2)
     }
 }

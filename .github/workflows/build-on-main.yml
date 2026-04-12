@@ -1,51 +1,20 @@
-# This file was generated using Kotlin DSL (.github/workflows/workflow.main.main.kts).
-# If you want to modify the workflow, please change the Kotlin file and regenerate this YAML file.
-# Generated with https://github.com/typesafegithub/github-workflows-kt
+name: 'Build & Tag'
 
-name: 'Create Tag'
 on:
   push:
-    branches:
-    - 'main'
-    - '[0-9]+.x'
-permissions:
-  contents: 'write'
+    branches: [main]
+
 jobs:
-  create_release_tag:
-    name: 'Create Release Tag'
-    runs-on: 'ubuntu-latest'
-    steps:
-    - id: 'step-0'
-      name: 'Check out'
-      uses: 'actions/checkout@v6'
-      with:
-        fetch-depth: '0'
-    - id: 'step-1'
-      name: 'Set up Java'
-      uses: 'actions/setup-java@v5'
-      with:
-        java-version: '17'
-        distribution: 'temurin'
-    - id: 'step-2'
-      name: 'Setup Gradle'
-      uses: 'gradle/actions/setup-gradle@v5'
-      with:
-        gradle-home-cache-cleanup: 'true'
-    - id: 'step-3'
-      name: 'Check'
-      run: './gradlew check'
-    - id: 'step-4'
-      name: 'Get Token'
-      uses: 'peter-murray/workflow-application-token-action@v4'
-      with:
-        application_private_key: '${{ secrets.ZENHELIX_COMMITER_APP_PRIVATE_KEY }}'
-        application_id: '${{ secrets.ZENHELIX_COMMITER_APP_ID }}'
-    - id: 'step-5'
-      name: 'Bump version and push tag'
-      uses: 'anothrNick/github-tag-action@v1'
-      env:
-        GITHUB_TOKEN: '${{ steps.step-4.outputs.token }}'
-        TAG_PREFIX: ''
-        DEFAULT_BUMP: 'patch'
-        RELEASE_BRANCHES: 'main,[0-9]+\.x'
-        TAG_CONTEXT: 'branch'
+  check:
+    uses: zenhelix/ci-workflows/.github/workflows/gradle-plugin-check.yml@v2
+    with:
+      java-version: '17'
+
+  create-tag:
+    needs: check
+    uses: zenhelix/ci-workflows/.github/workflows/gradle-create-tag.yml@v2
+    with:
+      java-version: '17'
+    secrets:
+      app-id: ${{ secrets.ZENHELIX_COMMITER_APP_ID }}
+      app-private-key: ${{ secrets.ZENHELIX_COMMITER_APP_PRIVATE_KEY }}

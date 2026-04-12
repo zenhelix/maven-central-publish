@@ -34,7 +34,7 @@ import kotlinx.coroutines.withContext
 import org.gradle.api.logging.Logger
 import org.gradle.api.logging.Logging
 
-public class DefaultMavenCentralApiClient(
+internal class DefaultMavenCentralApiClient(
     private val baseUrl: String,
     httpClient: HttpClient? = null,
     private val requestTimeout: Duration = Duration.ofMinutes(5),
@@ -75,7 +75,14 @@ public class DefaultMavenCentralApiClient(
             header("Content-Type", "multipart/form-data; boundary=$boundary")
 
             expectStatus(HttpStatus.CREATED)
-            parseSuccess { body -> DeploymentId.fromString(body) }
+            parseSuccess { body ->
+                try {
+                    DeploymentId.fromString(body.trim())
+                } catch (e: IllegalArgumentException) {
+                    logger.error("API returned invalid deployment ID: {}", body)
+                    null
+                }
+            }
             onSuccessLog { data -> "Bundle uploaded successfully. DeploymentId: $data" }
             onErrorLog { status, body -> "Failed to upload bundle. Status: ${status.code}, Response: $body" }
         }
@@ -321,23 +328,29 @@ public class DefaultMavenCentralApiClient(
     @JsonIgnoreProperties(ignoreUnknown = true)
     private data class DeploymentStatusDto(
         @param:JsonProperty("deploymentId")
-        val deploymentId: String,
+        val deploymentId: String? = null,
         @param:JsonProperty("deploymentName")
-        val deploymentName: String,
+        val deploymentName: String? = null,
         @param:JsonProperty("deploymentState")
-        val deploymentState: String,
+        val deploymentState: String? = null,
         @param:JsonProperty("purls")
-        val purls: List<String>?,
+        val purls: List<String>? = null,
         @param:JsonProperty("errors")
-        val errors: Map<String, Any?>?
+        val errors: Map<String, Any?>? = null
     ) {
-        fun toModel() = DeploymentStatus(
-            deploymentId = DeploymentId.fromString(deploymentId),
-            deploymentName = deploymentName,
-            deploymentState = DeploymentStateType.of(deploymentState),
-            purls = purls,
-            errors = errors
-        )
+        fun toModel(): DeploymentStatus {
+            requireNotNull(deploymentId) { "deploymentId is missing in API response" }
+            requireNotNull(deploymentName) { "deploymentName is missing in API response" }
+            requireNotNull(deploymentState) { "deploymentState is missing in API response" }
+
+            return DeploymentStatus(
+                deploymentId = DeploymentId.fromString(deploymentId),
+                deploymentName = deploymentName,
+                deploymentState = DeploymentStateType.of(deploymentState),
+                purls = purls,
+                errors = errors
+            )
+        }
     }
 
     private companion object {

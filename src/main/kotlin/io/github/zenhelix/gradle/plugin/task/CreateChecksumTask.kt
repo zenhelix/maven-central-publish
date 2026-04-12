@@ -68,12 +68,8 @@ public abstract class CreateChecksumTask : DefaultTask() {
             artifacts
                 .flatMap { artifact ->
                     CHECKSUM_ALGORITHMS.map { hashFunction ->
-                        val artifactFile = artifact.file()
-                        val artifactParentDir = artifactFile.parentFile?.name ?: "artifacts"
-                        val checksumDir = outDir.asFile
-                        val targetDir = File(checksumDir, artifactParentDir)
-                        val checksumFileName = "${artifact.artifactName}.${algorithmSuffix(hashFunction)}"
-                        project.layout.projectDirectory.file(File(targetDir, checksumFileName).absolutePath)
+                        val checksumFile = checksumFileFor(artifact, hashFunction, outDir.asFile)
+                        project.layout.projectDirectory.file(checksumFile.absolutePath)
                     }
                 }
         })
@@ -94,15 +90,14 @@ public abstract class CreateChecksumTask : DefaultTask() {
             return
         }
 
-        artifacts
-            .forEach { artifact ->
-                CHECKSUM_ALGORITHMS.forEach { hashFunction ->
-                    val checksumFile = getChecksumFile(artifact, hashFunction)
-                    checksumFile.parentFile.mkdirs()
-                    checksumFile.writeBytes(generateChecksum(artifact.file(), hashFunction))
-                }
+        val checksumDir = outputDirectory.get().asFile
+        artifacts.forEach { artifact ->
+            CHECKSUM_ALGORITHMS.forEach { hashFunction ->
+                val checksumFile = checksumFileFor(artifact, hashFunction, checksumDir)
+                checksumFile.parentFile.mkdirs()
+                checksumFile.writeBytes(generateChecksum(artifact.file(), hashFunction))
             }
-
+        }
     }
 
     public fun configureFromMavenPublication(publicationName: String) {
@@ -128,19 +123,10 @@ public abstract class CreateChecksumTask : DefaultTask() {
         return formattedHashString.toByteArray(StandardCharsets.US_ASCII)
     }
 
-    /**
-     * Gets the checksum file location for an artifact and hash function.
-     * Maintains the directory structure relative to the build directory.
-     */
-    private fun getChecksumFile(artifact: ArtifactInfo, hashFunction: HashFunction): File {
-        val artifactFile = artifact.file()
-        val artifactParentDir = artifactFile.parentFile?.name ?: "artifacts"
-
-        val checksumDir = outputDirectory.get().asFile
+    private fun checksumFileFor(artifact: ArtifactInfo, hashFunction: HashFunction, checksumDir: File): File {
+        val artifactParentDir = artifact.file().parentFile?.name ?: "artifacts"
         val targetDir = File(checksumDir, artifactParentDir)
-
         val checksumFileName = "${artifact.artifactName}.${algorithmSuffix(hashFunction)}"
-
         return File(targetDir, checksumFileName)
     }
 

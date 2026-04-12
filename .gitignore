@@ -19,6 +19,8 @@ tmp/
 *.bak
 local.properties
 .settings/
+.project
+.classpath
 
 ### Kotlin template
 .kotlin

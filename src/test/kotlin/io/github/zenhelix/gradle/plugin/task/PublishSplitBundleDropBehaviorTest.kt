@@ -31,10 +31,11 @@ class PublishSplitBundleDropBehaviorTest {
 
     @BeforeEach
     fun setUp() {
-        mockClient = mockk(relaxed = true)
+        mockClient = mockk()
 
         coEvery { mockClient.uploadDeploymentBundle(any(), any(), any(), any()) } returns
                 HttpResponseResult.Success(deploymentId)
+        coEvery { mockClient.close() } returns Unit
     }
 
     private fun createBundleFiles(count: Int): File {
@@ -132,11 +133,10 @@ class PublishSplitBundleDropBehaviorTest {
         assertThatThrownBy { executePublishSplitTask(bundlesDir) }
             .isInstanceOf(MavenCentralDeploymentException::class.java)
 
-        // handlePublishFailure should NOT drop id1 (already published) or id2 (the failed one)
-        // It should only drop remaining unpublished deployments (none in this case —
-        // id1 is published, id2 is the failed one)
-        // The key assertion: drop should NOT be called for id1 (already published)
+        // handlePublishFailure should NOT drop id1 (already published)
+        // but SHOULD drop id2 (the failed deployment — still in VALIDATED state)
         coVerify(exactly = 0) { mockClient.dropDeployment(any(), eq(id1)) }
+        coVerify(exactly = 1) { mockClient.dropDeployment(any(), eq(id2)) }
     }
 
     @Test
@@ -160,5 +160,11 @@ internal abstract class TestPublishSplitBundleTask : PublishSplitBundleMavenCent
     @get:org.gradle.api.tasks.Internal
     var testClient: MavenCentralApiClient? = null
 
-    override fun createApiClient(url: String): MavenCentralApiClient = testClient!!
+    override fun createApiClient(
+        url: String,
+        requestTimeout: java.time.Duration,
+        connectTimeout: java.time.Duration,
+        maxRetries: Int,
+        retryBaseDelay: java.time.Duration
+    ): MavenCentralApiClient = testClient!!
 }

@@ -23,11 +23,22 @@ public fun <T, E> Outcome<T, E>.onFailure(action: (E) -> Unit): Outcome<T, E> {
     return this
 }
 
+/**
+ * Transforms the error value using [transform], leaving success values untouched.
+ *
+ * The `else` branch handles subtypes of [Outcome] other than [Success]/[Failure]
+ * (e.g. [HttpResponseResult.UnexpectedError]). When [errorOrNull] is `null` the object
+ * carries no typed error, so the covariant cast from `Outcome<T, Nothing>` to
+ * `Outcome<T, R>` is safe at runtime.
+ */
 @Suppress("UNCHECKED_CAST")
 public fun <T, E, R> Outcome<T, E>.mapError(transform: (E) -> R): Outcome<T, R> = when (this) {
     is Success -> this
     is Failure -> Failure(transform(error))
-    else -> this as Outcome<T, R>
+    else -> {
+        val error = errorOrNull()
+        if (error != null) Failure(transform(error)) else this as Outcome<T, R>
+    }
 }
 
 public data class Success<out T>(val value: T) : Outcome<T, Nothing> {

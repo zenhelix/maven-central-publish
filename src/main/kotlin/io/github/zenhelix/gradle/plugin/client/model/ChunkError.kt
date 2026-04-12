@@ -2,8 +2,8 @@ package io.github.zenhelix.gradle.plugin.client.model
 
 import io.github.zenhelix.gradle.plugin.extension.toDisplayMB
 
-public sealed class ChunkError(public val message: String) {
-    public data class ModuleTooLarge(val moduleName: String, val moduleSize: Long, val maxSize: Long)
+internal sealed class ChunkError(val message: String) {
+    data class ModuleTooLarge(val moduleName: String, val moduleSize: Long, val maxSize: Long)
         : ChunkError(
             "Module '$moduleName' artifacts size ($moduleSize bytes / ${moduleSize.toDisplayMB()} MB) " +
                 "exceeds maxBundleSize ($maxSize bytes / ${maxSize.toDisplayMB()} MB). " +
@@ -11,5 +11,5 @@ public sealed class ChunkError(public val message: String) {
         )
 }
 
-public fun ChunkError.toGradleException(): MavenCentralChunkException =
+internal fun ChunkError.toGradleException(): MavenCentralChunkException =
     MavenCentralChunkException(error = this, message = message)

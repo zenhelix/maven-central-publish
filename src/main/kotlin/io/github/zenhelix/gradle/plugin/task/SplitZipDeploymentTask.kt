@@ -1,9 +1,9 @@
 package io.github.zenhelix.gradle.plugin.task
 
-import io.github.zenhelix.gradle.plugin.client.model.toGradleException
 import io.github.zenhelix.gradle.plugin.client.BundleChunker
 import io.github.zenhelix.gradle.plugin.client.Chunk
 import io.github.zenhelix.gradle.plugin.client.ModuleSize
+import io.github.zenhelix.gradle.plugin.client.model.toGradleException
 import io.github.zenhelix.gradle.plugin.extension.toDisplayKB
 import io.github.zenhelix.gradle.plugin.extension.toDisplayMB
 import java.io.File
@@ -48,7 +48,11 @@ public abstract class SplitZipDeploymentTask : DefaultTask() {
         val outputDir = outputDirectory.get().asFile
         // Clean stale ZIPs from previous runs to prevent uploading outdated chunks
         if (outputDir.exists()) {
-            outputDir.listFiles { f -> f.extension == "zip" }?.forEach { it.delete() }
+            outputDir.listFiles { f -> f.extension == "zip" }?.forEach { file ->
+                if (!file.delete()) {
+                    logger.warn("Failed to delete stale ZIP: ${file.absolutePath}")
+                }
+            }
         }
         outputDir.mkdirs()
 
@@ -114,19 +118,24 @@ public abstract class SplitZipDeploymentTask : DefaultTask() {
         publication.checksumFiles?.get()?.forEach { checksumFile ->
             val entryPath = "${publication.artifactPath}/${checksumFile.asFile.name}"
             if (addedEntries.add(entryPath)) {
-                zos.putNextEntry(ZipEntry(entryPath))
-                checksumFile.asFile.inputStream().buffered().use { it.copyTo(zos) }
-                zos.closeEntry()
+                zos.writeEntry(entryPath, checksumFile.asFile)
             }
         }
 
         publication.artifacts.get().forEach { artifactInfo ->
             val entryPath = "${publication.artifactPath}/${artifactInfo.artifactName}"
             if (addedEntries.add(entryPath)) {
-                zos.putNextEntry(ZipEntry(entryPath))
-                artifactInfo.file().inputStream().buffered().use { it.copyTo(zos) }
-                zos.closeEntry()
+                zos.writeEntry(entryPath, artifactInfo.file())
             }
+        }
+    }
+
+    private fun ZipOutputStream.writeEntry(entryPath: String, sourceFile: File) {
+        putNextEntry(ZipEntry(entryPath))
+        try {
+            sourceFile.inputStream().buffered().use { it.copyTo(this) }
+        } finally {
+            closeEntry()
         }
     }
 }

@@ -5,13 +5,13 @@ import io.github.zenhelix.gradle.plugin.client.model.Failure
 import io.github.zenhelix.gradle.plugin.client.model.Outcome
 import io.github.zenhelix.gradle.plugin.client.model.Success
 
-public data class ModuleSize(val name: String, val sizeBytes: Long)
+internal data class ModuleSize(val name: String, val sizeBytes: Long)
 
-public data class Chunk(val moduleNames: List<String>, val totalSize: Long)
+internal data class Chunk(val moduleNames: List<String>, val totalSize: Long)
 
-public object BundleChunker {
+internal object BundleChunker {
 
-    public fun chunk(modules: List<ModuleSize>, maxChunkSize: Long): Outcome<List<Chunk>, ChunkError> {
+    fun chunk(modules: List<ModuleSize>, maxChunkSize: Long): Outcome<List<Chunk>, ChunkError> {
         if (modules.isEmpty()) return Success(emptyList())
 
         modules.firstOrNull { it.sizeBytes > maxChunkSize }

@@ -66,14 +66,18 @@ class MavenCentralUploaderPluginFunctionalTest {
                 apply {
                     plugin("$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
                 }
-                
+
+                mavenCentralPortal {
+                    autoConfigureJars = false
+                }
+
                 publishing {
                     repositories {
                         mavenLocal()
                         ${mavenCentralPortal()}
                     }
                 }
-            
+
                 ${signing()}
                 $pom
             }
@@ -316,7 +320,7 @@ class MavenCentralUploaderPluginFunctionalTest {
         assertThat(
             ZipFile(testProjectDir.moduleBundleFile(null, moduleName, version, "allPublications").toFile())
         ).containsMavenArtifacts("test.zenhelix", moduleName, version) {
-            standardJavaLibrary()
+            standardJavaLibrary(withSources = true, withJavadoc = true)
         }
     }
 
@@ -380,8 +384,8 @@ class MavenCentralUploaderPluginFunctionalTest {
         assertThat(
             ZipFile(testProjectDir.moduleSplitBundleFile("test-library", version, "allModules").toFile())
         ).containsMavenArtifacts("test.zenhelix", "test-library", version) {
-            standardJavaLibrary(module1)
-            standardJavaLibrary(module2)
+            standardJavaLibrary(module1, withSources = true, withJavadoc = true)
+            standardJavaLibrary(module2, withSources = true, withJavadoc = true)
         }
     }
 
@@ -439,7 +443,7 @@ class MavenCentralUploaderPluginFunctionalTest {
         assertThat(
             ZipFile(testProjectDir.moduleBundleFile(module1, module1, version, "allPublications").toFile())
         ).containsMavenArtifacts("test.zenhelix", module1, version) {
-            standardJavaLibrary()
+            standardJavaLibrary(withSources = true, withJavadoc = true)
         }
     }
 
@@ -756,7 +760,7 @@ class MavenCentralUploaderPluginFunctionalTest {
         assertThat(
             ZipFile(testProjectDir.moduleBundleFile(appModuleName, appModuleName, version, publicationName).toFile())
         ).containsMavenArtifacts("test.zenhelix", appModuleName, version) {
-            standardJavaLibrary(withSources = true)
+            standardJavaLibrary(withSources = true, withJavadoc = true)
         }
     }
 
@@ -851,7 +855,7 @@ class MavenCentralUploaderPluginFunctionalTest {
         assertThat(
             ZipFile(testProjectDir.moduleBundleFile(appModuleName, appModuleName, version, "allPublications").toFile())
         ).containsMavenArtifacts("test.zenhelix", appModuleName, version) {
-            standardJavaLibrary(withSources = true)
+            standardJavaLibrary(withSources = true, withJavadoc = true)
         }
     }
 
@@ -1093,6 +1097,8 @@ class MavenCentralUploaderPluginFunctionalTest {
             .containsExactlyRootTasksInOrder(
                 "generateMetadataFileForBomPublicationPublication",
                 "generatePomFileForBomPublicationPublication",
+                "javadocJar",
+                "sourcesJar",
                 "signBomPublicationPublication",
                 "checksumBomPublicationPublication",
                 "zipDeploymentAllModules",
@@ -1225,7 +1231,7 @@ class MavenCentralUploaderPluginFunctionalTest {
         assertThat(
             ZipFile(testProjectDir.moduleBundleFile(null, moduleName, version, "allPublications").toFile())
         ).containsMavenArtifacts("test.zenhelix", moduleName, version) {
-            standardJavaLibrary()
+            standardJavaLibrary(withSources = true, withJavadoc = true)
         }
     }
 
@@ -1257,6 +1263,157 @@ class MavenCentralUploaderPluginFunctionalTest {
 
         testProjectDir.createJavaMainClass()
 
+        GradleDryRunOutputAssert
+            .assertThat(gradleDryRunRunner(testProjectDir, "zipDeploymentAllPublications"))
+            .containsTask(":zipDeploymentAllPublications")
+    }
+
+    @Test
+    fun `pom defaults from extension are applied to generated POM`() {
+        val version = "1.0.0"
+        val moduleName = "pom-defaults-test"
+
+        testProjectDir.settingsGradleFile().writeText(settings(moduleName))
+        //language=kotlin
+        testProjectDir.buildGradleFile().writeText(
+            """
+            plugins {
+                `java-library`
+                id("$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
+            }
+
+            ${group(version = version)}
+
+            mavenCentralPortal {
+                pom {
+                    name.set("My POM Library")
+                    description.set("A library with POM defaults")
+                    url.set("https://example.com/my-lib")
+                    inceptionYear.set("2025")
+                    license { apache2() }
+                    developer {
+                        id.set("dev1")
+                        name.set("Developer One")
+                        email.set("dev1@example.com")
+                    }
+                    scm { fromGithub("myorg", "myrepo") }
+                }
+            }
+
+            publishing {
+                repositories {
+                    mavenLocal()
+                    ${mavenCentralPortal()}
+                }
+                publications {
+                    create<MavenPublication>("mavenJava") {
+                        from(components["java"])
+                    }
+                }
+            }
+
+            ${signing()}
+            """.trimIndent()
+        )
+
+        testProjectDir.createJavaMainClass()
+
+        // Dry-run build should succeed without errors — DSL configuration is valid
+        GradleDryRunOutputAssert
+            .assertThat(gradleDryRunRunner(testProjectDir, "zipDeploymentAllPublications"))
+            .containsTask(":zipDeploymentAllPublications")
+    }
+
+    @Test
+    fun `autoConfigureJars registers javadocJar and sourcesJar tasks`() {
+        val version = "1.0.0"
+        val moduleName = "jar-scaffold-test"
+
+        testProjectDir.settingsGradleFile().writeText(settings(moduleName))
+        //language=kotlin
+        testProjectDir.buildGradleFile().writeText(
+            """
+            plugins {
+                `java-library`
+                id("$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
+            }
+
+            ${group(version = version)}
+
+            publishing {
+                repositories {
+                    mavenLocal()
+                    ${mavenCentralPortal()}
+                }
+                publications {
+                    create<MavenPublication>("mavenJava") {
+                        from(components["java"])
+                    }
+                }
+            }
+
+            ${signing()}
+            $pom
+            """.trimIndent()
+        )
+
+        testProjectDir.createJavaMainClass()
+
+        // Dry-run should include javadocJar and sourcesJar tasks
+        GradleDryRunOutputAssert
+            .assertThat(gradleDryRunRunner(testProjectDir, "zipDeploymentAllPublications"))
+            .containsTask(":javadocJar")
+            .containsTask(":sourcesJar")
+            .containsTask(":zipDeploymentAllPublications")
+    }
+
+    @Test
+    fun `retry config DSL is accepted without errors`() {
+        val version = "1.0.0"
+        val moduleName = "retry-config-test"
+
+        testProjectDir.settingsGradleFile().writeText(settings(moduleName))
+        //language=kotlin
+        testProjectDir.buildGradleFile().writeText(
+            """
+            import java.time.Duration
+
+            plugins {
+                `java-library`
+                id("$MAVEN_CENTRAL_PORTAL_PUBLISH_PLUGIN_ID")
+            }
+
+            ${group(version = version)}
+
+            mavenCentralPortal {
+                uploader {
+                    requestTimeout = Duration.ofMinutes(10)
+                    connectTimeout = Duration.ofSeconds(60)
+                    maxRetries = 5
+                    retryBaseDelay = Duration.ofSeconds(5)
+                }
+            }
+
+            publishing {
+                repositories {
+                    mavenLocal()
+                    ${mavenCentralPortal()}
+                }
+                publications {
+                    create<MavenPublication>("mavenJava") {
+                        from(components["java"])
+                    }
+                }
+            }
+
+            ${signing()}
+            $pom
+            """.trimIndent()
+        )
+
+        testProjectDir.createJavaMainClass()
+
+        // Dry-run build should succeed without errors — retry config DSL is valid
         GradleDryRunOutputAssert
             .assertThat(gradleDryRunRunner(testProjectDir, "zipDeploymentAllPublications"))
             .containsTask(":zipDeploymentAllPublications")
