@@ -253,7 +253,8 @@ publishing {
 }
 ----
 
-Each subproject publishes independently. For atomic multi-module publishing, also apply the plugin to the root project.
+Each subproject publishes independently.
+For atomic multi-module publishing, also apply the plugin to the root project.
 
 == Requirements
 
