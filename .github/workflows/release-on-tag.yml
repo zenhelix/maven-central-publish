@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   release:
-    uses: zenhelix/ci-workflows/.github/workflows/gradle-plugin-release.yml@v3
+    uses: zenhelix/ci-workflows/.github/workflows/gradle-plugin-release.yml@v4
     with:
       java-version: '17'
       publish-command: './gradlew publishPlugins publish -Pversion=''${{ github.ref_name }}'''
